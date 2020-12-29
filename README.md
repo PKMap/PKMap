@@ -99,4 +99,4 @@ of the imbalanced classes distribution of a dataset.
 ## Publications
 
 A primiary paper has been accepted by a conference.
-more will be submitted on [ArXiv](https://www.arxiv.org).
+More will be submitted on [ArXiv](https://www.arxiv.org).
