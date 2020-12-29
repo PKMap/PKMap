@@ -76,7 +76,7 @@ In case you want to change the colormap, you can do:
 do_plot(data, cmap='viridis')
 ```
 
-Or, you can store the figure by:
+Or, you can save the PKMap by:
 
 ```python
 do_plot(data, fig_types='.png')
@@ -88,3 +88,15 @@ formats will not be supported except
 ```python
 eps, jpeg, jpg, pdf, pgf, png, ps, raw, rgba, svg, svgz, tif, tiff
 ```
+
+## Why PKMap?
+
+Gain instructive insight of a datset before utilizing
+is currently virtually impossible.
+The PKMap is expected to offer an intuitionistic and visualized recognization
+of the imbalanced classes distribution of a dataset.
+
+## Publications
+
+A primiary paper has been accepted by a conference.
+more will be submitted on [ArXiv](https://www.arxiv.org).
