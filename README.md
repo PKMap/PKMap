@@ -15,12 +15,12 @@ Later, we found it works in dataset imbalance representation as well.
 The codes is programmed and tested on Python 3.8
 both on Windows 10 version 2004 and Mojave 10.14.6.
 Since a new format feature introduced in [PEP498](https://www.python.org/dev/peps/pep-0498/)
-is used, Python lower than 3.6 (exclusive) need a few extra adapting.
+is used, Python lower than 3.6 (inclusive) need a few extra adapting.
 
 ## Installation
 
-As the `pypi` support is coming,
-A directly clone will be recommanded.
+The `pypi` support is coming.
+A directly clone is always welcomed.
 
 ## How to use
 
@@ -38,7 +38,7 @@ data = read_REFIT(file_path)
 
 ```
 
-The `data` is a dictionary of statistic result which looks like this:
+The `data`, a pseudo truth table, is a dictionary of statistic result which looks like this:
 
 ```python
 data = {
@@ -52,7 +52,7 @@ data = {
 The `data.keys()` represents the ON/OFF state of each 9 appliances.
 And the `data.values()` means how many times the state combination
 is counted.
-Details about this has been placed in my latest paper
+Details about this has been explained in my latest paper
 (reference will be updated soon)
 
 After you feed the plotting function with the `data`,
@@ -99,4 +99,4 @@ of the imbalanced classes distribution of a dataset.
 ## Publications
 
 A primiary paper has been accepted by a conference.
-More will be submitted on [ArXiv](https://www.arxiv.org).
+More will be submitted on [arXiv](https://www.arxiv.org).
