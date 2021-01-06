@@ -36,7 +36,7 @@ def load1(house_nuimber, interval:str='min'):
         'hr': (-9-15*60, 60*60, ':00:00', -6),
         'day': (-9-15*60-12*60*60, 60*60*24, ' 00:00:00', -9)
     }
-    data = p1.data0[:1800000]
+    data = p1.data0
     app_para = app_data[house_nuimber]
     last_time = ""
 
@@ -146,14 +146,17 @@ def plot_time(house_number: int=6):
     ax.set_yticks(range(10))
     ax.set_yticklabels(cols[1:])
     time2 = DataFrame([(ind,k) for ind, k in time.items() if k[-8:]=='00:00:00'])
-    xrange = time2.reindex(np.linspace(0, time2.size-1, 8, dtype='int_'))[0]
-    xrange = xrange.dropna()
+    # print(time2)
+    # print(np.linspace(0, len(time2)-1, 8, dtype='int_'))
+    # print(time2.reindex(np.linspace(0, len(time2)-1, 8, dtype='int_'))[1])
+    xrange = time2.reindex(np.linspace(0, len(time2)-1, 8, dtype='int_'))
+    # xrange = xrange.dropna()
     # see https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#deprecate-loc-reindex-listlike
     print(xrange)
-    ax.set_xticks(xrange)
-    ax.set_xticklabels([time[ind][:-6] for ind in xrange])
-    ax.set_title(r'$\times$ mean of each appliance', fontsize=20)
-    fig.colorbar(plot1, cax = ax_1)
+    ax.set_xticks(xrange[0])
+    ax.set_xticklabels([k[:-9] for k in xrange[1]])
+    ax.set_title(r'time analysis of House ' + str(house_number) + ' by hour', fontsize=20)
+    fig.colorbar(plot1, cax = ax_1, label=r'by mean of each appliance')
     plt.show()
 
 
