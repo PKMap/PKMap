@@ -21,7 +21,8 @@ class pkmap(object):
     docstring
     """
     
-    def __init__(self, file_path = None, save_file=False, slice=None):
+    def __init__(self, file_path = None, save_file=False, slice=None, 
+                count=True):
         """
         docstring
         """
@@ -37,7 +38,7 @@ class pkmap(object):
         self.file_dir = '/'.join(self.file_path.split('/')[:-1])
         self.house_name = findall(r'House\d+', self.file_path)[-1]
         self.house_number = findall(r'\d+', self.house_name)[-1]
-        self.load()
+        self.load(count)
         self.app_name = read_excel(os.path.join(self.file_dir, 'MetaData_Tables.xlsx'), 
                     sheet_name='House ' + str(self.house_number), 
                     usecols=('Aggregate', ), ).values[:]
@@ -46,9 +47,10 @@ class pkmap(object):
                         for n in self.app_name.reshape(1,-1)[0]])
         # using as name_app[n][0]
         self.appQ = len(self.app_name)
+        self.len = len(self.data0.index)
 
 
-    def load(self):
+    def load(self, count):
         """
         docstring
         """
@@ -57,7 +59,8 @@ class pkmap(object):
         self.data2, self.data0 = read_REFIT(
             file_path = self.file_path, 
             save_file = self.save_file, 
-            slice = self.slice
+            slice = self.slice,
+            count=count,
         )
 
         return None

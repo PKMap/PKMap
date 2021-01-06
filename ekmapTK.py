@@ -37,7 +37,8 @@ from os import listdir
 import os
 from collections.abc import Iterable 
 
-from appliance_data import appliance_data as app_data
+from appliance_data import appliance_data
+from pkmap_data import AD, pat_data, app_data
 
 # default global variables
 TOTAL_LINE = 6960002
@@ -307,7 +308,7 @@ def plot_bar(data2):
     return {k:val2[k] for k in sorted(val2.keys())}
 
 
-def read_REFIT(file_path="", save_file=False, slice=None):
+def read_REFIT(file_path="", save_file=False, slice=None, count=True):
     """
     ready data to plot
 
@@ -315,8 +316,8 @@ def read_REFIT(file_path="", save_file=False, slice=None):
     save_file: save EKMap data or not
     slice: slice or not
         is None: no slice
-        is integer: slice dataset into `slice' piece
-        == this will affect the process number `PN' of multiprocess
+        is integer: slice dataset into `slice` piece
+        == this will affect the process number `PN` of multiprocess
 
     return: 
         data2: a dict of EKMap:
@@ -371,8 +372,11 @@ def read_REFIT(file_path="", save_file=False, slice=None):
 
     with tqdm(leave=False,
               bar_format="reading " + file_name + " ...") as pybar:
-        data0 = read_csv(file_path)
+        data_Ori = read_csv(file_path)
+    if not count:
+        return {}, data_Ori
 
+    data0 = copy(data_Ori)
     TOTAL_LINE = len(data0.index)
     # appliance total number
     appQ = len(data0.columns) - 4
@@ -485,7 +489,7 @@ def read_REFIT(file_path="", save_file=False, slice=None):
                     f.write(':'.join([k[0], str(k[1])]) + '\n')
         print('='*6+' saved '+ EK_name + 'xin' + str(slice) +'! '+'='*6)
 
-    return data2
+    return data2, data_Ori
 
 
 def read_EKfile(file_path):
@@ -612,7 +616,7 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
             else:
                 # d equals 0
                 ekback.loc[_ind, _col] = 0.06
-    
+
     # print(f'{(vmax, vmin)=}')
     ax.imshow(ekback, cmap='Blues',vmin=0, vmax=1)
     ax.imshow(ekmap, alpha = 1, cmap=cmap, vmin=vmin, vmax=vmax)
@@ -1009,6 +1013,14 @@ def do_plot(data2, ahead=(), cmap='inferno', fig_types=(), do_show=True,
     return 0
 
 
+def do_plot_time(self, cmap='inferno', fig_types=(), do_show=True,
+            titles="", pats=[]):
+    """
+    docstring
+    """
+    
+
+
 def slice_REFIT(file_path, n_slice, n_valid, n_test, n_app, save_dir):
     """
     slice dataset into `n_slice' pieces
@@ -1068,8 +1080,8 @@ def slice_REFIT(file_path, n_slice, n_valid, n_test, n_app, save_dir):
     # std_app = datax[(datax>5) & (datax < 800)].std()
     mean_app = 50
     std_app = 13
-    mean_app = app_data[name_app]['mean']
-    std_app = app_data[name_app]['std']
+    mean_app = appliance_data[name_app]['mean']
+    std_app = appliance_data[name_app]['std']
     TOTAL_LINE = len(data0.index)
     print(f'{TOTAL_LINE=}')
     print(f'{(mean_agg, std_agg)=}')
