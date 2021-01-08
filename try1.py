@@ -8,22 +8,140 @@ from pkmap import pkmap
 from pkmap_data import AD, pat_data, app_data
 # from ekmapTK import KM
 import numpy as np
-from pandas import DataFrame
+from pandas import DataFrame, read_csv
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
 from tqdm import tqdm
 from sklearn.cluster import KMeans
+import os
+import re
 
 
-def load1(house_nuimber, interval:str='min'):
+class PointBrowser:
+    """
+    Click on a point to select and highlight it -- the data that
+    generated the point will be shown in the lower axes.  Use the 'n'
+    and 'p' keys to browse through the next and previous points
+    """
+
+    def __init__(self, ax, ax2, fig):
+        # self.lastind = 0
+
+        # self.text = ax.text(0.05, 0.95, 'selected: none',
+        #                     transform=ax.transAxes, va='top')
+        # self.selected, = ax.plot([xs[0]], [ys[0]], 'o', ms=12, alpha=0.4,
+        #                          color='yellow', visible=False)
+        global data02
+
+        self.ax = ax
+        self.ax2 = ax2
+        self.fig = fig
+        self.inds = data02.index
+        self.cols = data02.columns
+        self.ax20 = None
+
+
+    def on_click(self, event):
+        """
+        docstring
+        """
+
+        if event.inaxes == self.ax:
+            print((self.inds[int(event.ydata)], self.cols[int(event.xdata)]))
+        self.app_select = self.inds[round(event.ydata)]
+        self.time_select = self.cols[round(event.xdata)]
+        print(f'{(self.app_select, self.time_select)=}')
+        
+        self.refresh()
+
+
+    def refresh(self):
+        """
+        docstring
+        """
+         
+        global data0
+
+        # ind1 = data0.reindex(data0.Time==self.time_select)
+        # ind2 = data0[data0.Time>self.time_select]
+        ind_get = DataFrame(range(self.cols.size))[self.cols==self.time_select].values[0,0]
+        # (self.cols)[self.cols==self.time_select][0]
+        print(ind_get)
+        cell = self.cols.size
+        
+        ind_low = ind_get-12 if ind_get > 12 else 0
+        ind_high = ind_get+12 if ind_get+12<cell else cell-1
+        print(f'{(ind_low, ind_high)=}')
+        # a < b < c will be translated to (a<b) and (b<c) as a sugger 
+        data_2plot = data0[((self.cols[ind_low] < data0.Time) & (data0.Time < self.cols[ind_high]))]
+        # print(data_2plot)
+        self.ax2.clear()
+        self.ax2.plot(data_2plot['Aggregate'], 'gray', label='Aggregate')
+        self.ax2.set_xlabel('data')
+        self.ax2.set_ylabel('Aggregate')
+        self.ax2.set_xlim(data_2plot.index[0], data_2plot.index[-1])
+        self.ax2.set_ylim(bottom=0)
+        
+        if self.app_select != 'Aggregate':
+            self.ax20 = self.ax2.twinx()
+            self.ax2.plot(range(3), 'm', label=self.app_select)
+            self.ax20.plot(data_2plot[self.app_select], 'm', )
+            self.ax20.set_ylabel(self.app_select)
+            self.ax20.set_ylim(bottom=0)
+            
+            if self.ax20.get_ylim()[1] > 0.4 * self.ax2.get_ylim()[1]:
+                print(self.ax2.get_ylim()[1])
+                self.ax20.set_ylim(top=self.ax2.get_ylim()[1])
+        self.ax2.legend()
+        
+        self.fig.canvas.draw()
+        if self.ax20:
+            self.fig.delaxes(self.ax20)
+            self.ax20 = None
+
+
+def in_axes(event):
     """
     docstring
     """
-    p1 = pkmap('./REFIT/CLEAN_House' + str(house_nuimber) + '.csv', count=False)
+    print(event)
+
+
+def out_axes(event):
+    """
+    docstring
+    """
+    print(event)
+
+
+def load1(house_number, interval:str='hr'):
+    """
+    docstring
+    """
+    global data02, data0
+
+    p1 = pkmap('./REFIT/CLEAN_House' + str(house_number) + '.csv', count=False)
+    data0 = p1.data0
     # pkmap.plot()
     # print(pkmap.data0)
+
+    file2save = 'house'+ str(house_number) + '_in_hour.csv'
+    path2save = './REFIT/' + file2save
+    for file in os.scandir('./REFIT/'):
+        if file2save == file.name:
+            # load exist file
+            print('\t:loading old data')
+            data02 = read_csv(path2save, dtype={'Time':'str'})
+            # print(data02)
+            # print(data02.dtypes)
+            return data02
+            break
+    else:
+        print('\t:counting ' + file2save)
+        # data02 = load1(house_number, interval='hr')
+        # data02.to_csv(path2save, index=False)
 
     '''
     from 17'51" to 18'51"
@@ -37,7 +155,7 @@ def load1(house_nuimber, interval:str='min'):
         'day': (-9-15*60-12*60*60, 60*60*24, ' 00:00:00', -9)
     }
     data = p1.data0
-    app_para = app_data[house_nuimber]
+    app_para = app_data[house_number]
     last_time = ""
 
     if interval.lower() in ('m', 'min', 'mins', 'minite', 'minites'):
@@ -111,16 +229,18 @@ def load1(house_nuimber, interval:str='min'):
     2  2013-11-28 12:17     15811          0 ...        434        811 ...        405
     ......
     '''
+    data02.to_csv(path2save, index=False)
 
     return data02
 
 
-def plot_time(house_number: int=6):
+def plot_time(house_number: int=6, noax2: bool=False):
     """
     docstring
     """
+    global data02
 
-    data02 = load1(house_number, interval='hr')
+    data02 = load1(house_number=house_number, interval='hr')
     cols = tuple(data02.columns)
     time = data02.Time
     data02 = DataFrame(data02.loc[:, cols[1:]].T, dtype='float_')
@@ -136,7 +256,10 @@ def plot_time(house_number: int=6):
     # plotting below
     # fig = plt.figure(figsize=(12, 5))
     # ax = fig.add_axes( )
-    fig, (ax, ax2) = plt.subplots(2,1,figsize=(15, 9))
+    if noax2:
+        fig, ax = plt.subplots(1,1,figsize=(15,9))
+    else:
+        fig, (ax, ax2) = plt.subplots(2,1,figsize=(15, 9))
     ax_1 = fig.add_axes([0.94, 0.5, 0.01, 0.4])
     # ax_1.set_visible = False
     # plot1 = ax.pcolormesh(data02, cmap='inferno', norm=cLogNorm())
@@ -145,18 +268,26 @@ def plot_time(house_number: int=6):
     # ax.set_xticklabels(time, rotation=45)
     ax.set_yticks(range(10))
     ax.set_yticklabels(cols[1:])
-    time2 = DataFrame([(ind,k) for ind, k in time.items() if k[-8:]=='00:00:00'])
+    time2 = DataFrame([(ind,k) for ind, k in time.items() if k[11:13]=='00'])
     # print(time2)
+    # print(DataFrame([(ind,k) for ind, k in time.items() if k[5:10]=='04-01']))
     # print(np.linspace(0, len(time2)-1, 8, dtype='int_'))
     # print(time2.reindex(np.linspace(0, len(time2)-1, 8, dtype='int_'))[1])
-    xrange = time2.reindex(np.linspace(0, len(time2)-1, 8, dtype='int_'))
-    # xrange = xrange.dropna()
+    xrange = time2.reindex(np.linspace(0, len(time2)-1, 15, dtype='int_'))
+    # xrange = time2.copy()
+    xrange = xrange.dropna()
     # see https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#deprecate-loc-reindex-listlike
     print(xrange)
     ax.set_xticks(xrange[0])
-    ax.set_xticklabels([k[:-9] for k in xrange[1]])
+    ax.set_xticklabels([k[:10] if np.mod(n,2) else '' for k,n in zip(xrange[1], range(1,22)) ])
     ax.set_title(r'time analysis of House ' + str(house_number) + ' by hour', fontsize=20)
     fig.colorbar(plot1, cax = ax_1, label=r'by mean of each appliance')
+    
+    if not noax2:
+        brower = PointBrowser(ax, ax2, fig)
+        fig.canvas.mpl_connect('button_release_event', brower.on_click)
+
+    # fig.tight_layout()
     plt.show()
 
 
@@ -239,7 +370,7 @@ def do2(house_number=7):
 if __name__ == "__main__":
     
     # do1()
-    plot_time(6)
+    plot_time(house_number=2, )
     # for ind in (0,):
     #     do2(ind+1)
 
