@@ -41,7 +41,7 @@ class pkmap(object):
         self.slice = slice
         self.file_dir = '/'.join(self.file_path.split('/')[:-1])
         self.house_name = findall(r'House\d+', self.file_path)[-1]
-        self.house_number = findall(r'\d+', self.house_name)[-1]
+        self.house_number = int(findall(r'\d+', self.house_name)[-1])
         self.load(count)
         self.app_name = read_excel(os.path.join(self.file_dir, 'MetaData_Tables.xlsx'), 
                     sheet_name='House ' + str(self.house_number), 
@@ -86,7 +86,6 @@ class pkmap(object):
         plot_time(self, house_number=self.house_number, 
                   app_name=self.app_name,
                   **args)
-        # pass
 
         return None
 
