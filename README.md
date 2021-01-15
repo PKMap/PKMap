@@ -17,6 +17,13 @@ both on Windows 10 version 2004 and Mojave 10.14.6.
 Since a new format feature introduced in [PEP498](https://www.python.org/dev/peps/pep-0498/)
 is used, Python lower than 3.6 (inclusive) need a few extra adapting.
 
+## Why PKMap?
+
+Gain instructive insight of a datset before utilizing
+is currently virtually impossible.
+The PKMap is expected to offer an intuitionistic and visualized recognization
+of the imbalanced classes distribution of a dataset.
+
 ## Installation
 
 The `pypi` support is coming.
@@ -30,18 +37,16 @@ We'll use REFIT (can be downloaded [here](https://pureportal.strath.ac.uk/en/dat
 as a demonstration from a relative path.
 
 ```python
-from ekmapTK import read_REFIT
+from pkmap import pkmap
 
-house_number = 16
-file_path = './REFIT/CLEAN_House' + str(house_number) + '.csv'
-data = read_REFIT(file_path)
-
+file_path = './REFIT/CLEAN_House16.csv'
+obj = pkmap(file_path)
 ```
 
-The `data`, a pseudo truth table, is a dictionary of statistic result which looks like this:
+The `.PTb`, a pseudo truth table, is a dictionary of statistic result which looks like this:
 
 ```python
-data = {
+obj.PTb = {
     # ......
     '11100010': 53,
     '11100110': 627,
@@ -49,8 +54,8 @@ data = {
 },
 ```
 
-The `data.keys()` represents the ON/OFF state of each 9 appliances.
-And the `data.values()` means how many times the state combination
+The `.keys()` represents the ON/OFF state of each 9 appliances.
+And the `.values()` means how many times the state combination
 is counted.
 Details about this has been explained in my latest paper
 (reference will be updated soon)
@@ -59,12 +64,10 @@ After you feed the plotting function with the `data`,
 a Karnaugh map wil be displayed.
 
 ```python
-from ekmapTK import do_plot
-
-do_plot(data)
+obj.plot()
 ```
 
-![example](figs/EKMap_House16.svg)
+![example of ](figs/PKMap_House16.svg)
 
 The colormap we used for default is `inferno`,
 where the brigner means more, and the darker mean less.
@@ -73,13 +76,14 @@ Those pretty light blue means the relative combination is missing.
 In case you want to change the colormap, you can do:
 
 ```python
-do_plot(data, cmap='viridis')
+obj.plot(data, cmap='viridis')
 ```
 
-Or, you can save the PKMap by:
+Or, you can save the PKMap by offering a fig type
+(the suffix of the file name):
 
 ```python
-do_plot(data, fig_types='.png')
+obj.plot(data, fig_types='.png')
 ```
 
 As the figure type will be passed to `matplotlib.pyplot.savefig`,
@@ -89,13 +93,6 @@ formats will not be supported except
 eps, jpeg, jpg, pdf, pgf, png, ps, raw, rgba, svg, svgz, tif, tiff
 ```
 
-## Why PKMap?
-
-Gain instructive insight of a datset before utilizing
-is currently virtually impossible.
-The PKMap is expected to offer an intuitionistic and visualized recognization
-of the imbalanced classes distribution of a dataset.
-
 ## previewing
 
 A preview funtion on the whole 9 appilances of a single dataset
@@ -104,12 +101,11 @@ in REFIT has been accomplished bascilly.
 Here is an example how to use it:
 
 ```python
-p1 = pkmap('./REFIT/CLEAN_House2.csv', count=False)
+p1 = pkmap('./REFIT/CLEAN_House16.csv', count=False)
 p1.preview()
-
 ```
 
-![an example of preview funcion](figs/preview_house2.svg)
+![an example of preview funcion](figs/preview_house16_by_day.svg)
 
 The upper axis plots each appliance's data (including aggregate data)
 in hours. The data are devided by mean of each applilance for
@@ -125,4 +121,4 @@ the releative waves.
 ## Publications
 
 A primiary paper has been accepted by a conference.
-More will be submitted on [arXiv](https://www.arxiv.org).
+More will be submitted on [arXiv](https://www.arxiv.org) in the future.
