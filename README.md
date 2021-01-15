@@ -60,8 +60,7 @@ is counted.
 Details about this has been explained in my latest paper
 (reference will be updated soon)
 
-After you feed the plotting function with the `data`,
-a Karnaugh map wil be displayed.
+A Karnaugh map caj be displayed by:
 
 ```python
 obj.plot()
