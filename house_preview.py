@@ -54,7 +54,7 @@ class PointBrowser:
         if interval == 'hour':
             self.scope = 32
         elif interval == 'day':
-            self.scope = 2
+            self.scope = 3
         elif interval == 'min':
             self.scope = 180
         self.noplot = True
@@ -111,11 +111,11 @@ class PointBrowser:
             self.time_select = self.cols[self.ind_get]
             self.refresh()
         elif key == 'l':
-            self.scope = int(self.scope * np.sqrt(10))
+            self.scope = np.round(self.scope * 1.6)
             print('\tamplify scope to {}'.format(self.scope))
             self.refresh()
         elif key in ('k', 's'):
-            self.scope = int(self.scope / np.sqrt(10))
+            self.scope = np.round(self.scope / 1.6)
             print('\tshrink scope to {}'.format(self.scope))
             self.refresh()
 
@@ -352,8 +352,7 @@ def plot_time(self,
         fig, (ax, ax2) = plt.subplots(2,1,figsize=(15, 9))
     ax_1 = fig.add_axes([0.94, 0.5, 0.01, 0.4])
     # ax_1.set_visible = False
-    # plot1 = ax.pcolormesh(data02, cmap='inferno', norm=cLogNorm())
-    plot1 = ax.imshow(data02, cmap='inferno_r', norm=LogNorm(), 
+    plot1 = ax.imshow(data02, cmap='inferno', norm=LogNorm(), 
                     aspect='auto', interpolation='none', resample=False)
     ax.set_yticks(range(10))
     ax.set_yticklabels(cols)

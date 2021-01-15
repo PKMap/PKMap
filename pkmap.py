@@ -66,6 +66,7 @@ class pkmap(object):
             slice = self.slice,
             count=count,
         )
+        self.PTb = self.data2
 
         return None
 
@@ -74,6 +75,9 @@ class pkmap(object):
         """
         docstring
         """
+        if not self.data2:
+            self.load(count=True)
+
         do_plot(self.data2, **args)
 
         return None
