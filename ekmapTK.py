@@ -25,7 +25,10 @@ from multiprocessing import Pool
 from tqdm import tqdm
 # import re
 import matplotlib.pyplot as plt
-import matplotlib.patches as pat
+import matplotlib.patches as mpat
+from matplotlib.colors import LogNorm
+from matplotlib.colors import ListedColormap
+from matplotlib.colors import LinearSegmentedColormap as Colormap
 # import seaborn as sn
 
 # python embedded library
@@ -37,8 +40,8 @@ from os import listdir
 import os
 from collections.abc import Iterable 
 
-from appliance_data import appliance_data
-from pkmap_data import AD, pat_data, app_data
+from .appliance_data import appliance_data
+from .pkmap_data import AD, pat_data, app_data
 
 # default global variables
 TOTAL_LINE = 6960002
@@ -46,6 +49,7 @@ FILE_PATH = './REFIT/CLEAN_House1.csv'
 val0 = {}
 data0 = DataFrame([])
 file_name = 'Housex'
+basepath = r'C:\Users\CVLab\Documents\nilm\expm1'
 
 
 def line_count(file_path):
@@ -167,15 +171,19 @@ def GM(n):
         return tuple([k for k in GM(n-1)] + [new_m2])
 
 
-def GMI(n):
+def GMI(n, labels:Iterable=()):
     """
     create margin index of each four sides
     nx: quantity of variables in x-axis
     ny: quantity of variables in y-axis
+
+    labels: a bunch of str
+        take place of A1, A2, ...
+        ===  no good by now, too crowed ===
     """
     n = int(abs(n))
     if n < 4:
-        raise ValueError('n = ' + str(n) + ' < 4 is not accepted!')
+        raise ValueError('n = {} < 4 is not accepted!'.format(str(n)))
     ny = int(n/2)
     nx = n - ny
     # nx, ny = int(abs(nx)), int(abs(ny))
@@ -190,37 +198,71 @@ def GMI(n):
     nA_L, nA_R = n_L, n_R   # marker of A(nA_L)
     R, L = {}, {}           # output container
     An = 1          # this shares both x and y
-    for m in my:
-        m2 = tuple([tuple((array(mt)*2**ny-1)/2) for mt in m])
-        if tk:
-            L['A'+str(An)] = (nA_L, m2)
-            tk ^= 1
-            An += 1
-            nA_L -= 1
-        else:
-            R['A'+str(An)] = (nA_R, m2)
-            tk ^= 1
-            An += 1
-            nA_R -= 1
+
+    if labels:
+        # labels is not empty, use the set labesl
+        if len(labels) < n:
+            raise ValueError('require {} labels, but got {} in {}'.format(n, len(labels), labels))
+        for m in my:
+            m2 = tuple([tuple((array(mt)*2**ny-1)/2) for mt in m])
+            if tk:
+                L[labels[An-1]] = (nA_L, m2)
+                tk ^= 1
+                An += 1
+                nA_L -= 1
+            else:
+                R[labels[An-1]] = (nA_R, m2)
+                tk ^= 1
+                An += 1
+                nA_R -= 1
+    else:
+        # labels is empty, use default: (A1, A2, ...)
+        for m in my:
+            m2 = tuple([tuple((array(mt)*2**ny-1)/2) for mt in m])
+            if tk:
+                L['A'+str(An)] = (nA_L, m2)
+                tk ^= 1
+                An += 1
+                nA_L -= 1
+            else:
+                R['A'+str(An)] = (nA_R, m2)
+                tk ^= 1
+                An += 1
+                nA_R -= 1
     
     mx = GM(nx)
     tk = True      # pointer, to n_L if True, to n_R if Flase
     nA_B, nA_T = n_B, n_T   # marker of A(nA_L)
     B, T = {}, {}           # output container
-    for m in mx:
-        m2 = tuple([tuple((array(mt)*2**nx-1)/2) for mt in m])
-        # print((m, m2))
-        if tk:
-            B['A'+str(An)] = (nA_B, m2)
-            tk ^= 1
-            An += 1
-            nA_B -= 1
-        else:
-            T['A'+str(An)] = (nA_T, m2)
-            tk ^= 1
-            An += 1
-            nA_T -= 1
-    
+    if labels:
+        for m in mx:
+            m2 = tuple([tuple((array(mt)*2**nx-1)/2) for mt in m])
+            # print((m, m2))
+            if tk:
+                B[labels[An-1]] = (nA_B, m2)
+                tk ^= 1
+                An += 1
+                nA_B -= 1
+            else:
+                T[labels[An-1]] = (nA_T, m2)
+                tk ^= 1
+                An += 1
+                nA_T -= 1
+    else:
+        for m in mx:
+            m2 = tuple([tuple((array(mt)*2**nx-1)/2) for mt in m])
+            # print((m, m2))
+            if tk:
+                B['A'+str(An)] = (nA_B, m2)
+                tk ^= 1
+                An += 1
+                nA_B -= 1
+            else:
+                T['A'+str(An)] = (nA_T, m2)
+                tk ^= 1
+                An += 1
+                nA_T -= 1
+        
     return ((n_L, n_R, n_B, n_T), L, R, B, T)
 
 
@@ -265,7 +307,7 @@ def do_count(arg2):
     return: counting results
     '''
 
-    val, data1 = arg2
+    val, data1, pybar = arg2
     # `val' is a container
     for k in data1.itertuples():
         # combinate new row as a key of a dict
@@ -273,7 +315,8 @@ def do_count(arg2):
 
         # for 0 default
         val[nw] += 1
-
+        pybar.update()
+    # print('got {} total'.format(sum(tuple(val.values()))))
     return val
 
 
@@ -308,13 +351,266 @@ def plot_bar(data2):
     return {k:val2[k] for k in sorted(val2.keys())}
 
 
-def read_REFIT(file_path="", save_file=False, slice=None, count=True):
+def gen_PKMap(data0, model: str='thrd', n_slice=None):
+    """
+
+
+    """
+    global TOTAL_LINE
+    print('\t run `gen_PKMap`!')
+    # print(data0)
+    if model.lower() == 'thrd':
+        threshold = 5       # power data large than this view as on state
+
+        # transfer to on/off value
+        # dx = data0.loc[:, 'Appliance1': 'Appliance9']
+        # data0.loc[:, 'Appliance1': 'Appliance9'] = (dx > threshold)
+        data0 = (data0>threshold)
+        # print(data0)
+    elif model.lower() in ('kmean', 'kmeans'):
+
+        pass
+    else:
+        print('unknown `model`: {}'.format(model))
+
+
+    '''
+    counting
+    store statics in a dict:
+    val0 = {
+        '11100010': 53,        # just an enxmple
+        ......
+    }
+    '''
+    # create a dict templet
+    # and then fill in the container
+    '''
+    val0 is the template incase lose of keys()
+    '''
+    appQ = len(data0.columns)
+    val0 = {}
+    nx = int(appQ / 2)
+    ny = int(appQ - nx)
+    for k in GC(nx):
+        for j in GC(ny):
+            t = k + j   # is str like '11110001'
+            # val0[t] = nan       # for plot benfits
+            val0[t] = 0
+
+    # fill in statics
+    '''c2 not used
+    # c2: choose 8 app to analysis (app3 don't looks good)
+    c2 = findall('Appliance[0-9]+', ''.join(data0.columns))
+    # c2 is a list of string
+    '''
+    tic = time()
+    # PN means number of process
+    if isinstance(n_slice, int):
+        # if `slice' is integer, do slice, offer PN as `slice'
+        PN = n_slice
+    else:
+        # if `slice` is None, no slice, offer PN as 8
+        PN = 8
+    TOTAL_LINE = len(data0.index)
+    x1 = linspace(0, TOTAL_LINE, num=PN + 1, dtype='int')
+    # x1 is a list of
+    x2 = (data0.index[x1[k]:x1[k+1]] for k in range(PN))
+    # x2 is a generator of each scope in a tuple of two int
+    print('slicinng with {}'.format(x1))
+    # result = list(range(PN))
+    with tqdm(leave=False, bar_format="Counting ...") as pybar:
+        # pooling will call gen_PKMap() instead of do_count
+        # but do well in Jan
+        '''with Pool(processes=8) as pool:
+            result = pool.map(do_count,  (
+                (val0.copy(), data0.loc[data0.index.isin(k)].copy())
+                for k in x2))
+            pool.close()
+            pool.join()
+        '''
+        result = [do_count((val0.copy(), data0.loc[data0.index.isin(k)].copy(), pybar)) 
+                  for k in x2]
+
+    toc = time()
+    print('finish counting in ' + beauty_time(toc-tic))
+
+    if isinstance(n_slice, int):
+        # `slice' is integer, will slice
+        # data2 is a list of dict with `slice' items
+        data2 = result.copy()
+        sumx = sum([sum(list(data2[k].values())) for k in range(n_slice)])
+        print(
+            'sum([sum(list(data2[k].values())) is {}'.format(sumx) + '\n')
+        pass
+
+    elif n_slice is None:
+        # `slice' is None, won't slice
+        # integrate `result' as `data2'
+        data2 = val0.copy()
+        data2 = {k: sum([result[t][k] for t in range(len(result))])
+                 for k in result[0].keys()}
+        sumy = sum(tuple(data2.values()))
+        print('sum(tuple(data2.values())) is {}'.format(sumy))
+
+    else:
+        data2 = None
+        print('unknown `n_slice`: {}'.format(n_slice))
+
+    return data2
+
+
+def gen_PKMap2(self, data0=None, key:str='active', 
+               model: str='thrd', 
+               n_slice=None,
+               no_save:bool=False,
+               ):
+    """
+        a self-transfering version
+    data0: a dict of PKMap
+        do not use it
+    """
+    global TOTAL_LINE
+    print('\t run `gen_PKMap2`!')
+
+    if not no_save: 
+        # check cache
+        cache_name = '_'.join(['PKcache', self.dataset, self.house_name, key])
+        # if already have, return directly
+        if not n_slice:
+            cache_name = '.'.join([cache_name, 'txt'])
+            for dirpath,dirnames,files in os.walk(self.cache_dir):
+                if cache_name in files:
+                    with open(os.path.join(self.cache_dir, cache_name), 'r') as f:
+                        data2 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
+                    print('='*6+' read from '+cache_name+'! '+'='*6)
+                    return data2
+                else:
+                    print('cache_name is {}'.format(cache_name))
+    else:
+        cache_name = ''
+
+    if data0 is None:
+        data0 = self.data0[key]
+
+    # print(data0)
+    if model.lower() in ('thrd', 'threshold', 'thresholds', 'td'):
+        threshold = 11       # power data large than this view as on state
+
+        # transfer to on/off value
+        # dx = data0.loc[:, 'Appliance1': 'Appliance9']
+        # data0.loc[:, 'Appliance1': 'Appliance9'] = (dx > threshold)
+        data0 = (data0>threshold)
+        # print(data0)
+    elif model.lower() in ('kmean', 'kmeans', 'km'):
+
+        pass
+    else:
+        raise TypeError('get unknown `model`: {}'.format(model))
+
+
+    '''
+    counting
+    store statics in a dict:
+    val0 = {
+        '11100010': 53,        # just an enxmple
+        ......
+    }
+    '''
+    # create a dict templet
+    # and then fill in the container
+    '''
+    val0 is the template incase lose of keys()
+    '''
+    appQ = len(data0.columns)
+    val0 = {}
+    nx = int(appQ / 2)
+    ny = int(appQ - nx)
+    for k in GC(nx):
+        for j in GC(ny):
+            t = k + j   # is str like '11110001'
+            # val0[t] = nan       # for plot benfits
+            val0[t] = 0
+
+    # fill in statics
+    '''c2 not used
+    # c2: choose 8 app to analysis (app3 don't looks good)
+    c2 = findall('Appliance[0-9]+', ''.join(data0.columns))
+    # c2 is a list of string
+    '''
+    tic = time()
+    # PN means number of process
+    if isinstance(n_slice, int):
+        # if `n_slice' is integer, do slice, offer PN as `slice'
+        PN = n_slice
+    else:
+        # if `n_slice` is None, no slice, offer PN as 8
+        PN = 8
+    TOTAL_LINE = len(data0.index)
+    x1 = linspace(0, TOTAL_LINE, num=PN + 1, dtype='int')
+    # x1 is a list of
+    x2 = (data0.index[x1[k]:x1[k+1]] for k in range(PN))
+    # x2 is a generator of each scope in a tuple of two int
+    print('slicinng with {}'.format(x1))
+    # result = list(range(PN))
+    with tqdm(leave=False, bar_format="Counting ...") as pybar:
+        # pooling will call gen_PKMap() instead of do_count
+        # but do well in Jan
+        '''with Pool(processes=8) as pool:
+            result = pool.map(do_count,  (
+                (val0.copy(), data0.loc[data0.index.isin(k)].copy())
+                for k in x2))
+            pool.close()
+            pool.join()
+        '''
+        result = [do_count((val0.copy(), data0.loc[data0.index.isin(k)].copy(), pybar)) 
+                  for k in x2]
+
+    toc = time()
+    print('finish counting in ' + beauty_time(toc-tic))
+
+    if isinstance(n_slice, int):
+        # `n_slice' is integer, will slice
+        # data2 is a list of dict with `n_slice' items
+        data2 = result.copy()
+        sumx = sum([sum(list(data2[k].values())) for k in range(n_slice)])
+        print(
+            'sum([sum(list(data2[k].values())) is {}'.format(sumx) + '\n')
+        pass
+
+    elif n_slice is None:
+        # `n_slice' is None, won't slice
+        # integrate `result' as `data2'
+        data2 = val0.copy()
+        data2 = {k: sum([result[t][k] for t in range(len(result))])
+                 for k in result[0].keys()}
+        sumy = sum(tuple(data2.values()))
+        print('sum(tuple(data2.values())) is {}'.format(sumy))
+
+    else:
+        data2 = None
+        print('unknown `n_slice`: {}'.format(n_slice))
+
+    if not no_save:
+        # save data2
+        save_file = True
+        if save_file and not n_slice:
+            # already have `cache_name`
+            print('saving cache: {}'.format(cache_name))
+            with open(os.path.join(self.cache_dir, cache_name), 'w') as f:
+                for k in data2.items():
+                    f.write(':'.join([k[0], str(k[1])]) + '\n')
+            print('='*6+' saved '+ cache_name +'! '+'='*6)
+
+    return data2
+
+
+def read_REFIT(file_path="", save_file=False, n_slice=None, no_count: bool=False):
     """
     ready data to plot
 
     file_path: a string, used as open(file_path,'rb')
     save_file: save EKMap data or not
-    slice: slice or not
+    n_slice: slice or not
         is None: no slice
         is integer: slice dataset into `slice` piece
         == this will affect the process number `PN` of multiprocess
@@ -341,45 +637,48 @@ def read_REFIT(file_path="", save_file=False, slice=None, count=True):
     global FILE_PATH
     global file_name
     # global data0
+    global basepath 
 
     if file_path == "":
         file_path = FILE_PATH
-    file_name = findall('/(.+)\.', file_path)[0]
-    file_dir = '/'.join(file_path.split('/')[:-1])
-    # file_path.split('/')[-1].split('.')[:-1][0]
+    file_name = os.path.basename(file_path)
+    file_name = ''.join(file_name.split('.')[:-1])
+    file_dir = os.path.dirname(file_path)
 
     # if already have, return directly
-    if not slice:
+    if not n_slice:
         for dirpath,dirnames,files in os.walk('./'):
-            EK_name = 'EKMap' + file_name[5:] + '.txt'
-            if EK_name in files:
-                with open(file_dir + '/' + EK_name, 'r') as f:
+            cache_name = 'EKMap' + file_name[5:] + '.txt'
+            if cache_name in files:
+                with open(file_dir + '/' + cache_name, 'r') as f:
                     data0 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
-                print('='*6+' read from '+EK_name+'! '+'='*6)
+                print('='*6+' read from '+cache_name+'! '+'='*6)
                 return data0
     else:
         for dirpath,dirnames,files in os.walk('./'):
-            EK_name = 'EKMap' + file_name[5:] + '_'
-            if EK_name+ '1in' + str(slice) +'.txt' in files:
-                data2 = [x for x in range(slice)]
-                for nslice in range(slice):
-                    EK_name2 = EK_name + str(nslice+1) + 'in' + str(slice)
-                    with open(file_dir + '/' + EK_name2 + '.txt', 'r') as f:
+            cache_name = 'EKMap' + file_name[5:] + '_'
+            if cache_name+ '1in' + str(n_slice) +'.txt' in files:
+                data2 = [x for x in range(n_slice)]
+                for nslice in range(n_slice):
+                    cache_name2 = cache_name + str(nslice+1) + 'in' + str(n_slice)
+                    with open(file_dir + '/' + cache_name2 + '.txt', 'r') as f:
                         data0 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
                     data2[nslice] = data0
-                print('='*6+' read from '+EK_name + 'xin' + str(slice)+'! '+'='*6)
+                print('='*6+' read from '+cache_name + 'xin' + str(n_slice)+'! '+'='*6)
                 return data2
 
     with tqdm(leave=False,
               bar_format="reading " + file_name + " ...") as pybar:
         data_Ori = read_csv(file_path)
-    if not count:
-        return {}, data_Ori
 
     data0 = copy(data_Ori)
+    data0.index=data0['Time']
+    data0 = data0.loc[:, 'Appliance1':'Appliance9']
+    if no_count:
+        return {}, data0
     TOTAL_LINE = len(data0.index)
     # appliance total number
-    appQ = len(data0.columns) - 4
+    appQ = len(data0.columns)
     print("find `" + str(appQ) + "' appliance with `" +
           str(TOTAL_LINE) + "' lines data in " + file_name)
 
@@ -398,98 +697,132 @@ def read_REFIT(file_path="", save_file=False, slice=None, count=True):
 
     '''
 
-    # transfer to on/off value
-    dx = data0.loc[:, 'Appliance1': 'Appliance9']
-    data0.loc[:, 'Appliance1': 'Appliance9'] = (dx > threshold)
+    data2 = gen_PKMap(data0, model='thrd', n_slice=n_slice, )
 
-    '''
-    counting
-    store statics in a dict:
-    val0 = {
-        '11100010': 53,        # just an enxmple
-        ......
-    }
-    '''
-    # create a dict templet
-    # and then fill in the container
-    '''
-    val0 is the template incase lose of keys()
-    '''
-    val0 = {}
-    nx = int(appQ / 2)
-    ny = int(appQ - nx)
-    for k in GC(nx):
-        for j in GC(ny):
-            t = k + j   # is str like '11110001'
-            # val0[t] = nan       # for plot benfits
-            val0[t] = 0
 
-    # fill in statics
-    # c2: choose 8 app to analysis (app3 don't looks good)
-    c2 = findall('Appliance[0-9]+', ''.join(data0.columns))
-    # c2 is a list of string
-    tic = time()
-    # PN means number of process
-    if slice:
-        # if `slice' is integer, do slice, offer PN as `slice'
-        PN = slice
-        pass
+
+    return data2, data_Ori
+
+
+def read_REFIT2(self, no_count=False):
+    """
+        a `self` passing version
+    ready data to plot
+
+    file_path: a string, used as open(file_path,'rb')
+    save_file: save EKMap data or not
+    n_slice: n_slice or not
+        is None: no slice
+        is integer: slice dataset into `slice` piece
+        == this will affect the process number `PN` of multiprocess
+
+    return: 
+        data2: a dict of EKMap:
+            '01010000': 35,     # counting consequence
+            '01011000': 0,      # not appear
+            ......
+        appQ: number of total appliance
+    # TOTAL_LINE: global variant in EKMApTK
+    0. count total lines
+    1. read csv file from REFIT
+    2. format as each app
+    3. median filtrate by app
+    4. filtrate to on/off data
+    """
+
+    global TOTAL_LINE
+    global FILE_PATH
+    global file_name
+    # global data0
+    global basepath 
+
+    file_path = self.file
+    save_file = self.save_file
+    n_slice = self.n_slice
+
+    if file_path == "":
+        file_path = FILE_PATH
+    file_name = os.path.basename(file_path)
+    file_name = ''.join(file_name.split('.')[:-1])
+    file_dir = os.path.dirname(file_path)
+    # file_path.split('/')[-1].split('.')[:-1][0]
+
+    # if already have, return directly
+    if not n_slice:
+        for dirpath,dirnames,files in os.walk('./'):
+            cache_name = 'EKMap' + file_name[5:] + '.txt'
+            if cache_name in files:
+                with open(file_dir + '/' + cache_name, 'r') as f:
+                    data0 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
+                print('='*6+' read from '+cache_name+'! '+'='*6)
+                return data0
     else:
-        # if `slice` is None, no slice, offer PN as 8
-        PN = 8
+        for dirpath,dirnames,files in os.walk('./'):
+            cache_name = 'EKMap' + file_name[5:] + '_'
+            if cache_name+ '1in' + str(n_slice) +'.txt' in files:
+                data2 = [x for x in range(n_slice)]
+                for nslice in range(n_slice):
+                    cache_name2 = cache_name + str(nslice+1) + 'in' + str(n_slice)
+                    with open(file_dir + '/' + cache_name2 + '.txt', 'r') as f:
+                        data0 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
+                    data2[nslice] = data0
+                print('='*6+' read from '+cache_name + 'xin' + str(n_slice)+'! '+'='*6)
+                return data2
 
-    x1 = linspace(0, TOTAL_LINE/1, num=PN + 1, dtype='int')
-    # x1 is a list of
-    x2 = (range(x1[k], x1[k+1]) for k in range(PN))
-    # x2 is a generator of each scope in a tuple of two int
-    print(x1)
-    # result = list(range(PN))
-    with tqdm(leave=False, bar_format="Counting ...") as pybar:
-        with Pool() as pool:
+    with tqdm(leave=False,
+              bar_format="reading " + file_name + " ...") as pybar:
+        data_Ori = read_csv(file_path)
 
-            result = pool.map(do_count,  (
-                (val0, data0.loc[data0.index.isin(k), c2].copy())
-                for k in x2))
-            pool.close()
-            pool.join()
+    data0 = copy(data_Ori)
+    self.data0 = data0
+    data0.index=data0['Time']
+    data0 = data0.loc[:, 'Appliance1':'Appliance9']
+    TOTAL_LINE = len(data0.index)
+    self.len = TOTAL_LINE
+    # appliance total number
+    appQ = self.appQ
+    print("find `" + str(appQ) + "' appliance with `" +
+          str(TOTAL_LINE) + "' lines data in " + file_name)
+    if no_count:
+        print('return without counting!')
+        self.data2 = {}
+        return {}, data0
+    
+    # data0.rename(columns = {'Appliance' + str(k+1): 'app' + str(k+1)
+    #     for k in range(appQ)})
+    '''
+    data0.columns is: 
+      ['Time', 'Unix', 'Aggregate', 'Appliance1', 'Appliance2', 'Appliance3',
+       'Appliance4', 'Appliance5', 'Appliance6', 'Appliance7', 'Appliance8',
+       'Appliance9', 'Issues']
+    '''
 
-    toc = time()
-    print('finish counting in ' + beauty_time(toc-tic))
+    '''
+    # filter here 
+    # add later as it's not necessary
 
-    if slice:
-        # `slice' is integer, will slice
-        # data2 is a list of dict with `slice' items
-        data2 = result.copy()
-        print(
-            f'{sum([sum(list(data2[k].values())) for k in range(slice)])=}' + '\n')
-        pass
+    '''
 
-    else:
-        # `slice' is None, won't slice
-        # integrate `result' as `data2'
-        data2 = val0.copy()
-        data2 = {k: sum([result[t][k] for t in range(len(result))])
-                 for k in result[0].keys()}
-
-        print(f'{sum(tuple(data2.values()))=}')
+    data2 = gen_PKMap(data0, model='thrd', n_slice=n_slice, )
+    self.data2 = data2
 
     # save data2
-    if save_file and not slice:
-        EK_name = 'EKMap' + file_name[5:]
+    if save_file and not n_slice:
+        cache_name = 'EKMap' + file_name[5:]
         with open(file_dir + '/' + '.txt', 'w') as f:
             for k in data2.items():
                 f.write(':'.join([k[0], str(k[1])]) + '\n')
-        print('='*6+' saved '+ EK_name +'! '+'='*6)
+        print('='*6+' saved '+ cache_name +'! '+'='*6)
     elif save_file:
-        EK_name = 'EKMap' + file_name[5:] + '_'
-        for nslice, data2 in zip(range(slice), data2):
-            EK_name2 = EK_name + str(nslice+1) + 'in' + str(slice)
-            with open(file_dir + '/' + EK_name2 + '.txt', 'w') as f:
+        cache_name = 'EKMap' + file_name[5:] + '_'
+        for nslice, data2 in zip(range(n_slice), data2):
+            cache_name2 = cache_name + str(nslice+1) + 'in' + str(n_slice)
+            with open(file_dir + '/' + cache_name2 + '.txt', 'w') as f:
                 for k in data2.items():
                     f.write(':'.join([k[0], str(k[1])]) + '\n')
-        print('='*6+' saved '+ EK_name + 'xin' + str(slice) +'! '+'='*6)
-
-    return data2, data_Ori
+        print('='*6+' saved '+ cache_name + 'xin' + str(n_slice) +'! '+'='*6)
+    
+    return None
 
 
 def read_EKfile(file_path):
@@ -546,7 +879,7 @@ def new_order(ahead=(), appQ=9):
     return tuple(order2)
 
 
-def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
+def do_plot_single2(self, key: str='active', cmap='inferno', fig_types=(), no_show=False,
                    titles="", pats=[]):
     """
     plot WKMap with markers around
@@ -555,13 +888,18 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
 
     ====== curtion! the use of x & y are mixed! ======
     """
-    global file_name
-    print(f'{file_name=}')
+    # global file_name
+    global basepath
+    file_name = '_'.join([self.dataset, self.house_name, key, 'PKMap'])
+    print('file_name is {}'.format(file_name))
     # fill in data
+    data3 = self.data2[key]
     appQ = len(tuple(data3.keys())[0])  # total number of appliance
+    # appQ = self.appQ[key]
     ny = int(appQ / 2)
     nx = appQ - ny
 
+    # n_M, *M = GMI(appQ, self.ins_name[key])
     n_M, *M = GMI(appQ)
     n_L, n_R, n_B, n_T = n_M
     wdd = {         # n_of_variables: (wdx, wdy, magnify_of_lxy)
@@ -569,14 +907,15 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
         # 7: (0.8, 1.2),
         4: (1, 1, 0.6, 0), 
         9:(0.4, 0.4, 0.35, -0.2),
+        10:(0.4,0.4,0.3,0),
     }
     if appQ in wdd.keys():
         wdx, wdy, mg, wfx = wdd[appQ]
     else: 
         wdx, wdy, mg, wfx = wdd[0]
-    # wfx: width fixer of the figsize
+    # wfx: width compensation of the figsize
     # I don't know why there is a slightly offset
-    # so a small fixer may be a quick repair pack
+    # so a small compensation fixer may be a quick repair
 
     wd1 = 0.3
     wd2 = 0
@@ -585,9 +924,11 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
     # print(f'{((n_L+n_R)*wdx+lx, (n_T+n_B)*wdy+ly)}')
     # print(f'{(n_L*wdx, lx, n_R*wdx)}')
     # print(f'{(n_T*wdy, ly, n_B*wdy)}')
-
-    fig = plt.figure(figsize=((n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly), 
+    figsize = ((n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly)
+    fig = plt.figure(figsize=(figsize[0],figsize[1]), 
                     constrained_layout=True)
+    print((fig.get_figwidth(), fig.get_figheight()))
+    print(figsize)
     # fig = plt.figure(figsize=(ly, lx))
     gs = fig.add_gridspec(3, 3,  
                 width_ratios=(n_L*wdx, lx, n_R*wdx), 
@@ -615,16 +956,21 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
                 # ekmap.loc[_ind, _col] = d
             else:
                 # d equals 0
+                # ax.fill([])
                 ekback.loc[_ind, _col] = 0.06
 
     # print(f'{(vmax, vmin)=}')
+    '''b_0 = -0.5
+    b_x = 2**nx-0.5
+    b_y = 2**ny-0.5
+    ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch='\\'))
+    '''
     ax.imshow(ekback, cmap='Blues',vmin=0, vmax=1)
-    ax.imshow(ekmap, alpha = 1, cmap=cmap, vmin=vmin, vmax=vmax)
+    ax.imshow(ekmap, alpha=1, cmap=cmap, vmin=vmin, vmax=vmax)
     ax.set_yticks(arange(2**ny))
     ax.set_xticks(arange(2**nx))
-    ax.set_yticklabels(ekmap.index.values, fontfamily='monospace')
-    ax.set_xticklabels(ekmap.columns.values,
-                       fontfamily='monospace', rotation=45)
+    ax.set_yticklabels(ekmap.index.values)
+    ax.set_xticklabels(ekmap.columns.values)
     if pats:
         # `pats' is not empty, do aditional draw
         for pat in pats:
@@ -650,7 +996,7 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
             # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
             ofst = mag_v[0]     # offset, a number start from 1
             args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
-                        'family':'monospace', 'size':'xx-large'}
+                        'family':'monospace', 'size':'large'}
             for ind in mag_v[1]:
                 # `mag_v[1]' like `((3.5, 7.48),)'
                 # or `((0.5, 2.5), (4.5, 6.5))'
@@ -693,21 +1039,407 @@ def do_plot2(data3, cmap='inferno', fig_types=(), do_show=True,
     for fig_type in fig_types:
         plt.pause(1e-13)
         # see in https://stackoverflow.com/questions/62084819/
-        plt.savefig('./figs/EKMap' +
-                    file_name[5:] + 
+        plt.savefig(os.path.join(basepath, 'figs', 
+                    file_name) + 
                     # str(time())[-5:] + 
                     fig_type, 
                     bbox_inches='tight')
 
-    if do_show:
-        plt.show()
-    else:
+    if no_show:
         plt.close(fig)
+    else:
+        plt.show()
 
     return fig
 
 
-def do_plot3(data3, cmap='inferno', fig_types=(), do_show=True,
+def do_plot_single3(self, data3=None, key: str='active', 
+                    cmap='inferno', fig_types=(), no_show=False,
+                    titles="", pats=[]):
+    """
+        a "colorbar'-involved version
+    plot WKMap with markers around
+    using `fig.add_gridspec'
+    data3: a dict 
+
+    ====== curtion! the use of x & y are mixed! ======
+    """
+    # global file_name
+    global basepath
+    file_name = '_'.join(['PKMap', self.dataset, self.house_name, key, titles])
+    print('file_name is `{}`'.format(file_name))
+    
+    # fill in data
+    if data3 is None:
+        data3 = self.data2[key]
+    # appQ = len(tuple(data3.keys())[0])  # total number of appliance
+    appQ = self.appQ[key]
+    ny = int(appQ / 2)
+    nx = appQ - ny
+
+    # n_M, *M = GMI(appQ, self.ins_name[key])
+    n_M, *M = GMI(appQ)
+
+    n_L, n_R, n_B, n_T = n_M
+    wdd = {         # n_of_variables: (wdx, wdy, magnify_of_lxy)
+        0: (0.6, 0.6, 0.4, 0),      # the default parameter
+        # 7: (0.8, 1.2),
+        4: (1, 1, 0.6, 0), 
+        9:(0.4, 0.4, 0.35, -0.2),
+        10:(0.4,0.4,0.3,0),
+    }
+    if appQ in wdd.keys():
+        wdx, wdy, mg, wfx = wdd[appQ]
+    else: 
+        wdx, wdy, mg, wfx = wdd[0]
+    # wfx: width compensation of the figsize
+    # I don't know why there is a slightly offset
+    # so a small compensation fixer may be a quick repair
+
+    wd1 = 0.3
+    wd2 = 0
+    if mod(appQ, 2):
+        # appQ is 5,7,9,...
+        lx = mg*2**5
+        ly = mg*2**4
+    else:
+        # appQ is 6,8,10,...
+        lx = mg*2**4
+        ly = mg*2**4
+    # print(f'{((n_L+n_R)*wdx+lx, (n_T+n_B)*wdy+ly)}')
+    # print(f'{(n_L*wdx, lx, n_R*wdx)}')
+    # print(f'{(n_T*wdy, ly, n_B*wdy)}')
+    figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
+    cbw = 0.3      # width of color bar
+    figsize[2] = figsize[0] + cbw + 0.6
+    # kill the floating error
+    figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
+    fig = plt.figure(figsize=figsize, 
+                    constrained_layout=True)
+    print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
+    # fig = plt.figure(figsize=(ly, lx))
+    gs = fig.add_gridspec(nrows=3, ncols=4, 
+                width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
+                height_ratios=(n_T*wdy, ly, n_B*wdy),
+                left=0, right=1, bottom=0, top=1,
+                wspace=0.02, hspace=0.06)
+
+    ax = fig.add_subplot(gs[1,1])
+    ax0 = copy(ax)
+    # ====== `ekmap' is the contant of a subplot ======
+    ekmap = KM(ny, nx)      # preparing a container
+    ekback = KM(ny, nx)     # backgroud container
+    # ek = 1
+    vmax = sum(list(data3.values()))
+    # vmax = max(tuple(data3.values()))
+    # vmin = min(tuple(data3.values()))
+    # vmax = 110
+    vmin = 0.8
+
+    for _ind in ekmap.index:
+        for _col in ekmap.columns:
+            d = data3[_ind + _col]
+            if d:
+                # d is larger than 0
+                # ekmap.loc[_ind, _col] = log(d/ek)
+                ekmap.loc[_ind, _col] = d
+            else:
+                # d equals 0
+                # ax.fill([])
+                ekback.loc[_ind, _col] = 0.06
+
+    # print(f'{(vmax, vmin)=}')
+    '''b_0 = -0.5
+    b_x = 2**nx-0.5
+    b_y = 2**ny-0.5
+    ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch='\\'))
+    '''
+    # colors: `azure`(cyan), `aliceblue`, `ghostwhite`
+    ax.imshow(ekback, cmap=ListedColormap(['aliceblue']),vmin=0, vmax=1)
+    im_main = ax.imshow(ekmap, alpha=1, cmap=cmap, 
+                        vmin=vmin, 
+                        vmax=vmax, 
+                        norm=LogNorm())
+    ax.set_yticks(arange(2**ny))
+    ax.set_xticks(arange(2**nx))
+    ax.set_yticklabels(ekmap.index.values)
+    ax.set_xticklabels(ekmap.columns.values)
+    if pats:
+        # `pats' is not empty, do aditional draw
+        for pat in pats:
+            ax.add_patch(copy(pat))
+    ax.axis('off')
+
+    for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
+        # S = L, R, B, T
+        if xy in ('B', 'T'):
+            ax_S = fig.add_subplot(pl, sharex=ax)
+        elif xy in ('L', 'R'):
+            ax_S = fig.add_subplot(pl, sharey=ax)
+        else:
+            ax_S = fig.add_subplot(pl)
+        # print(f'{S}')
+        cf1 = wd1
+        cf2 = 0.1
+        for margin in S.items():
+            mag_n = margin[0]
+            # dict.key, like `A1'
+            mag_v = margin[1]
+            # dict.value like `(2, ((3.5, 7.48),))'
+            # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
+            ofst = mag_v[0]     # offset, a number start from 1
+            args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
+                        'family':'monospace', 'size':'x-large'}
+            for ind in mag_v[1]:
+                # `mag_v[1]' like `((3.5, 7.48),)'
+                # or `((0.5, 2.5), (4.5, 6.5))'
+                m_st = ind[0]           # start
+                m_itl = ind[1] - ind[0]     # interval
+                m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
+                m_ty = cf1*ofst - cf2       # vartical to the axis
+                if   xy in ('L', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
+                    ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
+                elif xy in ('R', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
+                    ax_S.text(m_ty, m_tx, mag_n, **args_text)
+                elif xy in ('B', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
+                    ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
+                elif xy in ('T', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
+                    ax_S.text(m_tx, m_ty, mag_n, **args_text)
+
+        if   xy in ('L', ):
+            ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
+        elif xy in ('R', ):
+            ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
+        elif xy in ('B', ):
+            ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
+        elif xy in ('T',):
+            ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
+            if titles:
+                ax_S.set_title(titles, size=24)
+        ax_S.axis('off')
+
+    axn = fig.add_subplot(gs[1,3])
+    cbar = fig.colorbar(im_main, cax=axn, shrink=0.00001)
+    cbar.ax.set_ylabel('counts ({} total)'.format(vmax), size='x-large')
+    
+    # fig.tight_layout()
+    # if not isinstance(fig_types, Iterable):
+    #     fig_types = (fig_types, )
+    for fig_type in fig_types:
+        plt.pause(1e-13)
+        # see in https://stackoverflow.com/questions/62084819/
+        plt.savefig(os.path.join(basepath, 'figs', 
+                    file_name) + 
+                    # str(time())[-5:] + 
+                    fig_type, 
+                    bbox_inches='tight')
+
+    if no_show:
+        plt.close(fig)
+    else:
+        plt.show()
+
+    return fig
+
+
+def do_plot_BM(self, key: str, 
+                    cmap='inferno', fig_types=(), no_show=False,
+                    titles="", pats=[]):
+    """
+        print bm dict
+        from do_plot_single3()
+    plot WKMap with markers around
+    using `fig.add_gridspec'
+
+    key: str
+        is necessary
+
+    ====== curtion! the use of x & y are mixed! ======
+    """
+    # global file_name
+    global basepath
+    file_name = '_'.join(['PKMap', self.dataset, self.house_name, key, titles])
+    print('file_name is `{}`'.format(file_name))
+    
+    # fill in data
+    data3 = self.data2[key]
+    appQ = len(tuple(data3.keys())[0])  # total number of appliance
+    # appQ = self.appQ[key]
+    ny = int(appQ / 2)
+    nx = appQ - ny
+
+    # n_M, *M = GMI(appQ, self.ins_name[key])
+    n_M, *M = GMI(appQ)
+
+    n_L, n_R, n_B, n_T = n_M
+    wdd = {         # n_of_variables: (wdx, wdy, magnify_of_lxy)
+        0: (0.6, 0.6, 0.4, 0),      # the default parameter
+        # 7: (0.8, 1.2),
+        4: (1, 1, 0.6, 0), 
+        9:(0.4, 0.4, 0.35, -0.2),
+        10:(0.4,0.4,0.3,0),
+    }
+    if appQ in wdd.keys():
+        wdx, wdy, mg, wfx = wdd[appQ]
+    else: 
+        wdx, wdy, mg, wfx = wdd[0]
+    # wfx: width compensation of the figsize
+    # I don't know why there is a slightly offset
+    # so a small compensation fixer may be a quick repair
+
+    wd1 = 0.3
+    wd2 = 0
+    if mod(appQ, 2):
+        # appQ is 5,7,9,...
+        lx = mg*2**5
+        ly = mg*2**4
+    else:
+        # appQ is 6,8,10,...
+        lx = mg*2**4
+        ly = mg*2**4
+    # print(f'{((n_L+n_R)*wdx+lx, (n_T+n_B)*wdy+ly)}')
+    # print(f'{(n_L*wdx, lx, n_R*wdx)}')
+    # print(f'{(n_T*wdy, ly, n_B*wdy)}')
+    figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
+    cbw = 0.3      # width of color bar
+    figsize[2] = figsize[0] + cbw + 0.6
+    # kill the floating error
+    figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
+    fig = plt.figure(figsize=figsize, 
+                    constrained_layout=True)
+    print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
+    # fig = plt.figure(figsize=(ly, lx))
+    gs = fig.add_gridspec(nrows=3, ncols=4, 
+                width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
+                height_ratios=(n_T*wdy, ly, n_B*wdy),
+                left=0, right=1, bottom=0, top=1,
+                wspace=0.02, hspace=0.06)
+
+    ax = fig.add_subplot(gs[1,1])
+    # ax0 = copy(ax)
+    # ====== `ekmap' is the contant of a subplot ======
+    ekmap = KM(ny, nx)      # preparing a container
+    
+    vmax = 1
+    vmin = -1
+
+    for _ind in ekmap.index:
+        for _col in ekmap.columns:
+            d = data3[_ind + _col]
+            ekmap.loc[_ind, _col] = d
+    print(ekmap)
+    # print(f'{(vmax, vmin)=}')
+    
+    # colors: `azure`(cyan), `aliceblue`, `ghostwhite`
+    cmap2 = Colormap.from_list('mycol1', ['indigo', 'c', 'ivory', 'darkorange', 'maroon'])
+    im_main = ax.imshow(ekmap, alpha=1, cmap=cmap2, 
+                        vmin=vmin, 
+                        vmax=vmax, 
+                        )
+    ax.set_yticks(arange(2**ny))
+    ax.set_xticks(arange(2**nx))
+    ax.set_yticklabels(ekmap.index.values)
+    ax.set_xticklabels(ekmap.columns.values)
+    if pats:
+        # `pats' is not empty, do aditional draw
+        for pat in pats:
+            ax.add_patch(copy(pat))
+    ax.axis('off')
+
+    for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
+        # S = L, R, B, T
+        if xy in ('B', 'T'):
+            ax_S = fig.add_subplot(pl, sharex=ax)
+        elif xy in ('L', 'R'):
+            ax_S = fig.add_subplot(pl, sharey=ax)
+        else:
+            ax_S = fig.add_subplot(pl)
+        # print(f'{S}')
+        cf1 = wd1
+        cf2 = 0.1
+        for margin in S.items():
+            mag_n = margin[0]
+            # dict.key, like `A1'
+            mag_v = margin[1]
+            # dict.value like `(2, ((3.5, 7.48),))'
+            # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
+            ofst = mag_v[0]     # offset, a number start from 1
+            args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
+                        'family':'monospace', 'size':'x-large'}
+            for ind in mag_v[1]:
+                # `mag_v[1]' like `((3.5, 7.48),)'
+                # or `((0.5, 2.5), (4.5, 6.5))'
+                m_st = ind[0]           # start
+                m_itl = ind[1] - ind[0]     # interval
+                m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
+                m_ty = cf1*ofst - cf2       # vartical to the axis
+                if   xy in ('L', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
+                    ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
+                elif xy in ('R', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
+                    ax_S.text(m_ty, m_tx, mag_n, **args_text)
+                elif xy in ('B', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
+                    ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
+                elif xy in ('T', ):
+                    ax_S.add_patch(plt.Rectangle(
+                        (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
+                    ax_S.text(m_tx, m_ty, mag_n, **args_text)
+
+        if   xy in ('L', ):
+            ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
+        elif xy in ('R', ):
+            ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
+        elif xy in ('B', ):
+            ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
+        elif xy in ('T',):
+            ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
+            if titles:
+                ax_S.set_title(titles, size=24)
+        ax_S.axis('off')
+
+    axn = fig.add_subplot(gs[1,3])
+    cbar = fig.colorbar(im_main, cax=axn, shrink=0.00001)
+
+    # this cause a error but do not know why
+    # RuntimeError: In draw_glyphs_to_bitmap: Could not convert glyph to bitmap
+    # cbar.ax.set_ylabel('get bm is: {}'.format(self.bm[key]))
+    
+    
+    # print(axn.set_ylim(top=30))
+    # fig.tight_layout()
+    # if not isinstance(fig_types, Iterable):
+    #     fig_types = (fig_types, )
+    for fig_type in fig_types:
+        plt.pause(1e-13)
+        # see in https://stackoverflow.com/questions/62084819/
+        plt.savefig(os.path.join(basepath, 'figs', 
+                    file_name) + 
+                    # str(time())[-5:] + 
+                    fig_type, 
+                    bbox_inches='tight')
+
+    if no_show:
+        plt.close(fig)
+    else:
+        plt.show()
+
+    return fig
+
+
+def do_plot3(data3, cmap='inferno', fig_types=(), no_show=False,
                    titles="", pats=[]):
     """
     plot WKMap with 3D surface
@@ -715,7 +1447,7 @@ def do_plot3(data3, cmap='inferno', fig_types=(), do_show=True,
 
     """
     global file_name
-    print(f'{file_name=}')
+    print('file_name is {}'.format(file_name))
     # fill in data
     appQ = len(tuple(data3.keys())[0])  # total number of appliance
     ny = int(appQ / 2)
@@ -767,15 +1499,15 @@ def do_plot3(data3, cmap='inferno', fig_types=(), do_show=True,
                     fig_type, 
                     bbox_inches='tight')
 
-    if do_show:
-        plt.show()
-    else:
+    if no_show:
         plt.close(fig)
+    else:
+        plt.show()
 
     return fig
 
 
-def do_plot_single(data3, cmap='inferno', fig_types=(), do_show=True,
+def do_plot_single(data3, cmap='inferno', fig_types=(), no_show=False,
                    titles="", pats=[]):
     """
     plot one axe in one figure
@@ -783,6 +1515,7 @@ def do_plot_single(data3, cmap='inferno', fig_types=(), do_show=True,
 
     """
     global file_name
+    global basepath
     # fill in data
     appQ = len(tuple(data3.keys())[0])  # total number of appliance
     nx = int(appQ / 2)
@@ -845,19 +1578,19 @@ def do_plot_single(data3, cmap='inferno', fig_types=(), do_show=True,
     for fig_type in fig_types:
         plt.pause(1e-13)
         # see in https://stackoverflow.com/questions/62084819/
-        plt.savefig('./figs/EKMap' +
+        plt.savefig(os.path.join(basepath, 'figs\\EKMap') +
                     file_name[5:] +str(time())[-5:] + fig_type, 
                     bbox_inches='tight')
 
-    if do_show:
-        plt.show()
-    else:
+    if no_show:
         plt.close(fig)
+    else:
+        plt.show()
 
     return fig
 
 
-def do_plot_multi(data3, cmap='inferno', fig_types=(), do_show=True,
+def do_plot_multi(data3, cmap='inferno', fig_types=(), no_show=False,
                   titles="", pats=[]):
     """
     plot multiplt axes in one figure
@@ -873,6 +1606,7 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), do_show=True,
     """
 
     global file_name
+    global basepath
     # fill in data
     appQ = len(tuple(data3[0].keys())[0])  # total number of appliance
     nx = int(appQ / 2)
@@ -888,7 +1622,7 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), do_show=True,
     fsize = (int(num_row * 2**(ny-nx)*3), num_col*4)
     fig, axes = plt.subplots(
         num_col, num_row, figsize=fsize)
-    print(f'{fsize=}')
+    print('fsize is {}'.format(fsize))
 
     # ====== `ekmap' is the contant of a subplot ======
     ekmap = KM(nx, ny)      # preparing a container
@@ -897,7 +1631,9 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), do_show=True,
     vmax = log(sum(tuple(data3[0].values())))
     # ax_it = (k for k in axes)
     if not titles:
-        titles = full(n_slice, None)
+        # when `titles` is empty
+        # titles = full(n_slice, None)
+        titles = (sum(list(data3[k].values())) for k in range(n_slice))
     ind = ((c, r) for c in range(num_col) for r in range(num_row))
     for datax, title, in zip(data3, titles, ):
         for _ind in ekmap.index:
@@ -927,7 +1663,6 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), do_show=True,
             # `title' has been specified
             ax.set_title(title, size=24)
             # see in https://stackoverflow.com/questions/42406233/
-            pass
 
         if pats:
             # `pats' is not empty, do aditional draw
@@ -944,22 +1679,31 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), do_show=True,
     for fig_type in fig_types:
         plt.pause(1e-13)
         # see in https://stackoverflow.com/questions/62084819/
-        plt.savefig('./figs/EKMap' +
+        plt.savefig(os.path.join(basepath, 'figs\\EKMap') +
                     file_name[5:] + fig_type, bbox_inches='tight')
 
-    if do_show:
-        plt.show()
-    else:
+    if no_show:
         plt.close(fig)
+    else:
+        plt.show()
 
     return fig
 
 
-def do_plot(data2, ahead=(), cmap='inferno', fig_types=(), do_show=True,
+def do_plot(self, data2=None, key: str='active', 
+            ahead=(), cmap='inferno', 
+            fig_types=(), no_show=False,
             titles="", pats=[]):
     """
     do plot, save EKMap figs 
 
+    self: pkmap.pkmap object
+    
+    data2: 
+    !!! caution when use it        !!!
+    !!! add another `key` instead  !!!
+
+    key: one of the ac_type: 'active', 'reactive' or 'apparent'
     data2: a dict of EKMap
             or a list of dict of EKMap
     appQ: integer, the number of appliance
@@ -969,8 +1713,8 @@ def do_plot(data2, ahead=(), cmap='inferno', fig_types=(), do_show=True,
     fig_types: an enumerable object, tuple here
             used if figure saving required
             ## string along is not excepted ## 
-    do_show: run `plt.show()' or not 
-        (fig still showed when set `False', fix later since is harmless)
+    no_show: run `plt.show()' or not 
+        (fig still showed when set `True', fix later since is harmless)
     title: a string, the fig title 
             must have same size as `data2' (enumerate together)
     pats: add rectangle if needed, an enumerable object
@@ -982,38 +1726,54 @@ def do_plot(data2, ahead=(), cmap='inferno', fig_types=(), do_show=True,
     when blending use of slashes and backslashes
     see in https://stackoverflow.com/questions/16333569
     """
-    try:
+    if data2 is None:
+        data2 = self.data2[key]
+    '''try:
         appQ = len(tuple(data2.keys())[0])  # total number of appliance
     except AttributeError as identifier:
         # type(data2) is a list
         appQ = len(tuple(data2[0].keys())[0])
-
-    order_ind = new_order(ahead, appQ)
-
+    '''     # no need in this func
+    
+    '''order_ind = new_order(ahead, self.appQ[key])
+    '''     # no used feature
     # input correction
     if isinstance(fig_types, str):
+        if fig_types.lower() in ('d', 'default', 'defautl', 'defualt', 'defuatl'):
+            fig_types = ('png', 'svg')
         fig_types = (fig_types, )
-
+    # 'png' --> '.png'
+    fig_types = tuple([t if t.startswith('.') else '.'.join(['',t]) for t in fig_types])
+    
     # function reconsitution
     if isinstance(data2, dict):
         # data2 is single
-        data3 = {''.join([key[s] for s in order_ind]): data2[key]
+        '''data3 = {''.join([key[s] for s in order_ind]): data2[key]
                  for key in data2.keys()}
+        '''
         print('do_plot_single')
-        do_plot2(data3, cmap, fig_types, do_show,
-                       titles, pats)
-    else:
+        do_plot_single3(self, data3=data2, key=key, 
+                        cmap=cmap, fig_types=fig_types, 
+                        no_show=no_show,
+                        titles=titles, pats=pats)
+    elif isinstance(data2, Iterable) and isinstance(data2[0], dict):
         # data2 is a list of dict
-        data3 = tuple({''.join([key[s] for s in order_ind]): datax[key]
+        '''data3 = tuple({''.join([key[s] for s in order_ind]): datax[key]
                        for key in datax.keys()} for datax in data2)
+        '''
         print('do_plot_multiple')
-        do_plot_multi(data3, cmap, fig_types, do_show,
-                      titles, pats)
+        do_plot_multi(data2, 
+                      cmap=cmap, fig_types=fig_types, 
+                      no_show=no_show,
+                      titles=titles, pats=pats)
+
+    else:
+        raise('get unknown type of data2: {}'.format(type(data2)))
 
     return 0
 
 
-def do_plot_time(self, cmap='inferno', fig_types=(), do_show=True,
+def do_plot_time(self, cmap='inferno', fig_types=(), no_show=False,
             titles="", pats=[]):
     """
     docstring
@@ -1083,13 +1843,13 @@ def slice_REFIT(file_path, n_slice, n_valid, n_test, n_app, save_dir):
     mean_app = appliance_data[name_app]['mean']
     std_app = appliance_data[name_app]['std']
     TOTAL_LINE = len(data0.index)
-    print(f'{TOTAL_LINE=}')
-    print(f'{(mean_agg, std_agg)=}')
-    print(f'{(mean_app, std_app)=}')
+    print('TOTAL_LINE is {}'.format(TOTAL_LINE))
+    print('(mean_agg, std_agg) is {}'.format((mean_agg, std_agg)))
+    print('(mean_app, std_app) is {}'.format((mean_app, std_app)))
 
     x1 = linspace(0, TOTAL_LINE, num=n_slice + 1, dtype='int')
     # x1 is a list
-    print(f'{x1=}')
+    print('x1 is {}'.format(x1))
     x2 = ((x1[k], x1[k+1]) for k in range(n_slice))
     if not isinstance(n_test, Iterable):
         n_test = (n_test, )
@@ -1153,7 +1913,7 @@ if __name__ == "__main__":
     #     data2 = read_REFIT(file_path, slice=slice)
 
     #     do_plot(data2, (0,), titles=tuple(str(k+1) + r'in' + str(slice) for k in range(slice)),
-    #             do_show=True, fig_types=('in' + str(slice) + '.png', ),
+    #             no_show=False, fig_types=('in' + str(slice) + '.png', ),
     #             )
     x = GMI(7)
     for ind in x:
