@@ -43,6 +43,20 @@ file_path = './REFIT/CLEAN_House16.csv'
 obj = pkmap(file_path)
 ```
 
+In update [bd9401a](https://github.com/PKMap/PKMap/commit/bd9401abe7d50ca91637d8a25bf43aaa0a1fce25),
+we add support for `nilmtk.Building` item:
+
+```python
+from nilmtk import DataSet
+from pkmap import pkmap
+
+
+D1 = DataSet('xx.h5')
+obj = pkmap(file=D1.Buildings[1])
+```
+
+(Ignore the PTb part if it doesn't make sense)
+
 The `.PTb`, a pseudo truth table, is a dictionary of statistic result which looks like this:
 
 ```python
@@ -66,11 +80,11 @@ A Karnaugh map caj be displayed by:
 obj.plot()
 ```
 
-![example of ](figs/PKMap_House16.svg)
+![example of PKMap](figs/PKMap_REFIT_House1_active_.svg)
 
-The colormap we used for default is `inferno`,
-where the brigner means more, and the darker mean less.
-Those pretty light blue means the relative combination is missing.
+The colormap we used for default is `inferno_r`,
+where the brigner means less, and the darker mean more.
+This makes the 'lighter' parts looks like the background color.
 
 In case you want to change the colormap, you can do:
 
@@ -79,7 +93,7 @@ obj.plot(data, cmap='viridis')
 ```
 
 Or, you can save the PKMap by offering a fig type
-(the suffix of the file name):
+(str without dot or any Iterable item is supported):
 
 ```python
 obj.plot(data, fig_types='.png')
@@ -89,13 +103,22 @@ As the figure type will be passed to `matplotlib.pyplot.savefig`,
 formats will not be supported except
 
 ```python
-eps, jpeg, jpg, pdf, pgf, png, ps, raw, rgba, svg, svgz, tif, tiff
+(eps, jpeg, jpg, pdf, pgf, png, ps, raw, rgba, svg, svgz, tif, tiff)
 ```
+
+## the Balance Mertic Mapping
+
+Experimental codes have been updated, and coming the paper.
+And looks like this by now:
+
+![example of BM](figs/PKMap_REFIT_House3_Tumble_dryer_bm.svg)
 
 ## previewing
 
 A preview funtion on the whole 9 appilances of a single dataset
 in REFIT has been accomplished bascilly.
+
+==**This feature is unstable**==
 
 Here is an example how to use it:
 
@@ -119,5 +142,25 @@ the releative waves.
 
 ## Publications
 
-A primiary paper has been accepted by a conference.
-More will be submitted on [arXiv](https://www.arxiv.org) in the future.
+A primiary paper about the PKMap has been publish, more is on the way.
+
+1. Lu Z, Liu G, Liao R. A pseudo Karnaugh mapping approach
+for datasets imbalance. In: E3S Web of Conferences. Vol 236. EDP Sciences;
+2021:04006. DOI:[10.1051/e3sconf/202123604006](https://doi.org/10.1051/e3sconf/202123604006)
+
+Here is the BibLaTeX code:
+
+```text
+@inproceedings{lu2021,
+  title = {A Pseudo {{Karnaugh}} Mapping Approach for Datasets Imbalance},
+  booktitle = {{{E3S Web}} of {{Conferences}}},
+  author = {Lu, Zhijian and Liu, Gang and Liao, Rongwen},
+  editor = {Anpo, M. and Song, F.},
+  date = {2021},
+  volume = {236},
+  pages = {04006},
+  publisher = {{EDP Sciences}},
+  doi = {10.1051/e3sconf/202123604006},
+  eventtitle = {3rd {{International Conference}} on {{Energy Resources}} and {{Sustainable Development}} ({{ICERSD2020}})}
+}
+```
