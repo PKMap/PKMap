@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# === ekmapTK.py ===
+# === utls.py ===
 # utils for PKMap using pandas.DataFrame
 #   with the help of multiprocess
 

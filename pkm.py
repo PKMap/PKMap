@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# === pkmap.py ===
+# === pkm.py ===
 
 import os
 from re import findall, match
@@ -33,9 +33,9 @@ except Exception as E:
     print('{} happens while importing nilmtk'.format(E))
     no_nilmtk = True
 
-from .utls import gen_PKMap2 as gen_PKMap
-from .utls import read_REFIT2 as read_REFIT
-from .utls import do_plot, do_plot_BM
+from .utils import gen_PKMap2 as gen_PKMap
+from .utils import read_REFIT2 as read_REFIT
+from .utils import do_plot, do_plot_BM
 from .house_preview import plot_time
 
 

@@ -17,6 +17,9 @@ both on Windows 10 version 2004 and Mojave 10.14.6.
 Since a new format feature introduced in [PEP498](https://www.python.org/dev/peps/pep-0498/)
 is used, Python lower than 3.6 (inclusive) need a few extra adapting.
 
+(The useage of this feature has been removed since update
+update [bd9401a](https://github.com/PKMap/PKMap/commit/bd9401abe7d50ca91637d8a25bf43aaa0a1fce25))
+
 ## Why PKMap?
 
 Gain instructive insight of a datset before utilizing
@@ -37,25 +40,24 @@ We'll use REFIT (can be downloaded [here](https://pureportal.strath.ac.uk/en/dat
 as a demonstration from a relative path.
 
 ```python
-from pkmap import pkmap
+from pkmap import PKMap
 
-file_path = './REFIT/CLEAN_House16.csv'
-obj = pkmap(file_path)
+file_path = './REFIT/CLEAN_House17.csv'
+obj = PKMap(file_path)
 ```
 
 In update [bd9401a](https://github.com/PKMap/PKMap/commit/bd9401abe7d50ca91637d8a25bf43aaa0a1fce25),
-we add support for `nilmtk.Building` item:
+we add support for `nilmtk.Buildings` item:
 
 ```python
 from nilmtk import DataSet
-from pkmap import pkmap
+from pkmap import PKMap
 
-
-D1 = DataSet('xx.h5')
-obj = pkmap(file=D1.Buildings[1])
+D1 = DataSet('refit.h5')
+obj = PKMap(file=D1.Buildings[16])
 ```
 
-(Ignore the PTb part if it doesn't make sense)
+(Ignore the part below if it doesn't make sense)
 
 The `.PTb`, a pseudo truth table, is a dictionary of statistic result which looks like this:
 
@@ -80,7 +82,11 @@ A Karnaugh map caj be displayed by:
 obj.plot()
 ```
 
-![example of PKMap](figs/PKMap_REFIT_House1_active_.svg)
+![example of PKMap](figs/PKMap_REFIT_House17_active.svg)
+
+BTW, the background with `patch=r'/'` is successfully added
+in update [ddab932](https://github.com/PKMap/PKMap/commit/ddab9322d1139f090f1a1d4ccd5276a4acd15b58)
+under the help of `Artist.set_zorder()`.
 
 The colormap we used for default is `inferno_r`,
 where the brigner means less, and the darker mean more.
@@ -89,14 +95,14 @@ This makes the 'lighter' parts looks like the background color.
 In case you want to change the colormap, you can do:
 
 ```python
-obj.plot(data, cmap='viridis')
+obj.plot(data, cmap='viridis_r')
 ```
 
 Or, you can save the PKMap by offering a fig type
 (str without dot or any Iterable item is supported):
 
 ```python
-obj.plot(data, fig_types='.png')
+obj.plot(data, fig_types='png')
 ```
 
 As the figure type will be passed to `matplotlib.pyplot.savefig`,
@@ -106,24 +112,27 @@ formats will not be supported except
 (eps, jpeg, jpg, pdf, pgf, png, ps, raw, rgba, svg, svgz, tif, tiff)
 ```
 
+Also, a default value of `("png", "svg")` will be used
+if `fig_types` is set to `"d"` or `"default"`.
+
 ## the Balance Mertic Mapping
 
 Experimental codes have been updated, and coming the paper.
-And looks like this by now:
+the BM map looks like this by now:
 
-![example of BM](figs/PKMap_REFIT_House3_Tumble_dryer_bm.svg)
+![example of BM](figs/PKMap_REFIT_House17_Computer-bm.svg)
 
 ## previewing
 
 A preview funtion on the whole 9 appilances of a single dataset
 in REFIT has been accomplished bascilly.
 
-==**This feature is unstable**==
+==**This feature is currently unstable**==
 
 Here is an example how to use it:
 
 ```python
-p1 = pkmap('./REFIT/CLEAN_House16.csv', count=False)
+p1 = PKMap('./REFIT/CLEAN_House16.csv', count=False)
 p1.preview()
 ```
 
