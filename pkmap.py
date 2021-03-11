@@ -18,6 +18,8 @@ from numpy import diff, array, log, log10
 from numpy import sum, abs, sqrt
 from sklearn.cluster import KMeans
 
+from tqdm import tqdm
+
 try:
     from nilmtk.building import Building
     from nilmtk import DataSet
@@ -37,14 +39,13 @@ from .ekmapTK import do_plot, do_plot_BM
 from .house_preview import plot_time
 
 
-class pkmap(object):
+class PKMap(object):
     """
     docstring
     """
     
     def __init__(self, file = None, 
                  model: str='thrd', 
-                 save_file: bool=False, 
                  n_slice=None, 
                  no_count: bool=False,
                  no_load: bool=False,
@@ -55,7 +56,7 @@ class pkmap(object):
         file: .csv file path | nilmtk.Building
             input a data file and gogogo
 
-        ===  do not use `no_load` for now ===
+        !!! do not use `no_load`
         """
 
         if file is None:
@@ -65,14 +66,13 @@ class pkmap(object):
             self.file = './REFIT/CLEAN_House7.csv'
         else:
             self.file = file
-        self.save_file = save_file
         self.model = model
         self.n_slice = n_slice
         self.no_count = no_count
         self.no_load = no_load
         self.cache_dir = os.path.join(os.getcwd(), 'cache')
         self.bm = {}
-        # print(self.cache_dir)
+
         if not os.path.exists(self.cache_dir):
             os.mkdir(self.cache_dir)
         
@@ -125,12 +125,10 @@ class pkmap(object):
             self.file_dir = None
             self.house_number = self.file.metadata['instance']
             self.house_name = self.file.metadata['original_name']
-            meters = self.file.elec.submeters().meters
-            # self.appQ = len(meters)
-            # self.app_name = tuple([m.appliances[0].identifier.type for m in meters])
-            # instance name, used for pd.DataFrame
-            # self.ins_name = tuple([m.appliances[0].label(pretty=True) for m in meters])
-            self.load_nilm(model=self.model, n_slice=self.n_slice, no_count=self.no_count)
+
+            self.load_nilm(model=self.model, 
+                           n_slice=self.n_slice, no_count=self.no_count, 
+                           no_load=self.no_load)
             self.isnilmtk = True
             
         else:
@@ -140,7 +138,10 @@ class pkmap(object):
     def load_nilm(self, 
                   model: str='thrd', 
                   n_slice=None, 
-                  no_count: bool=True):
+                  no_count: bool=True, 
+                  no_load: bool=False,
+                  no_save: bool=False,
+                  ):
         """
         docstring
         """
@@ -152,6 +153,7 @@ class pkmap(object):
         self.app_name = {}
         self.ins_name = {}
         self.appQ = {}
+        self.avail_key = set([])
         if 'power' in meters[0].available_physical_quantities():
             avail_ac = set()
             for meterx in meters:
@@ -161,35 +163,56 @@ class pkmap(object):
             self.avail_ac = avail_ac
             # [print(m.available_ac_types('power')) for m in meters]
 
-            if not self.no_load:
-                main_ = next(self.file.elec.meters[0].load())
-                st_day = main_.index[0].date()
-                ed_day = main_.index[-1].date()
-                m2 = None
-                for ac1 in avail_ac:
-                # for ac1 in ('reactive',):
+            # loading data
+            main_ = next(self.file.elec.meters[0].load())
+            st_day = main_.index[0].date()
+            ed_day = main_.index[-1].date()
+            m2 = None
+            for ac1 in avail_ac:
+                with tqdm(leave=False, total=1, 
+                          bar_format='\tloading `{}` data from {}...'.format(ac1, self.house_name)):
+                
                     m1 = [next(m.load(ac_type=ac1)).loc[st_day:ed_day] for m in meters 
                         if ac1 in m.available_ac_types('power')]
-                    m2 = concat(m1, axis=1)
-                    self.app_name[ac1] = [m.appliances[0].identifier.type for m in meters 
-                                if ac1 in m.available_ac_types('power')]
-                    self.ins_name[ac1] = tuple([m.appliances[0].label(pretty=True) for m in meters
-                                        if ac1 in m.available_ac_types('power')])
-                    m2.columns = self.ins_name[ac1]
-                    self.data0[ac1] = m2
-                    print(m2)
-                    self.appQ[ac1] = len(m2.columns)
-                    if not no_count:
-                        self.data2[ac1] = gen_PKMap(self, key=ac1, model=model, n_slice=n_slice)
-                self.len = len(m2.index)
-            else:
-                # `no_load` is True, repair `appQ`
-                pass
+                    m2 = concat(m1, axis=1)     # combine each app to one DataFrame
+                app_names = [(m.appliances[0].identifier.type).title().replace(' ', '')
+                            for m in meters if ac1 in m.available_ac_types('power')]
+                self.app_name[ac1] = app_names
+
+                ins_names = set([])
+                self.ins_name[ac1] = []
+                for name in app_names:
+                    if name in ins_names:
+                        # duplicate, add a suffix (2,3,4,...)
+                        for suf in range(2, 9):
+                            name2 = ''.join([name, str(suf)])
+                            if not name2 in ins_names:
+                                # reach a new name, load and quit
+                                ins_names.add(name2)
+                                self.ins_name[ac1].append(name2)
+                                break
+                    else:
+                        ins_names.add(name)
+                        self.ins_name[ac1].append(name)
+                self.ins_name[ac1] = tuple(self.ins_name[ac1])
+                # ins_names = tuple([m.appliances[0].label(pretty=True) for m in meters
+                                    # if ac1 in m.available_ac_types('power')])
+                m2.columns = self.ins_name[ac1]
+                self.data0[ac1] = m2
+                self.appQ[ac1] = len(m2.columns)
+                print(m2)
+                if not no_count:
+                    self.data2[ac1] = gen_PKMap(self, key=ac1, 
+                                                model=model, n_slice=n_slice,
+                                                no_save=no_save)
+                    self.avail_key.add(ac1)
+                
+            self.len = len(m2.index)
         elif 'energy' in meters[0].available_physical_quantities():
             print('energy type found in {}'.format(self.file.metadata['dataset']))
 
         else:
-            print('unknown physical_quantities: {}'.format(meters[0].available_physical_quantities()))
+            raise('unknown physical_quantities: {}'.format(meters[0].available_physical_quantities()))
 
         # [print(datax) for datax in self.data0.values()]
         self.PTb = self.data2
@@ -213,8 +236,9 @@ class pkmap(object):
 
     def plot(self, data2=None, key:str='active',
             cmap:str='inferno_r', fig_types=(), 
-            no_show:bool=False,
-            titles="", pats=[]):
+            no_show:bool=False, 
+            titles="", pats=[], 
+            **args):
         """
         docstring
 
@@ -226,18 +250,17 @@ class pkmap(object):
         # data_tp is always a dict
         if key.lower() in ('all', 'a', 'as'):
             print('plotting all ac_type: {}'.format(self.avail_ac))
-            for key_ in self.avail_ac:
+            for key_ in self.avail_key:
                 # print('plotting: {}'.format(data2))
                 do_plot(self, data2=None, key=key_, 
                         cmap=cmap, fig_types=fig_types, no_show=no_show,
-                        titles=titles, pats=pats)
+                        titles=titles, pats=pats, **args)
         else:
-            
             # fix input
-            if not key in self.avail_ac:
+            if not key in self.avail_key:
                 print('key = `{}` is not available!'.format(key))
                 key = list(self.avail_ac)[0]
-            print('plotting ac_type as {}'.format(key))
+            print('plotting default ac_type as {}'.format(key))
 
             if data2 is None:
                 if not self.data2:
@@ -245,6 +268,7 @@ class pkmap(object):
                         # self.load_nilm(model=self.model, n_slice=self.n_slice, no_count=False)
                         for ac1 in self.avail_ac:
                             self.data2[ac1] = gen_PKMap(self, key=ac1, model=self.model, n_slice=self.n_slice)
+                            self.avail_keyf.add(ac1)
                     else:
                         self.load(no_count=False)
                 data2 = self.data2[key]
@@ -252,7 +276,7 @@ class pkmap(object):
             do_plot(self, data2=data2, key=key, 
                     cmap=cmap, fig_types=fig_types, 
                     no_show=no_show,
-                    titles=titles, pats=pats)
+                    titles=titles, pats=pats, **args)
 
         return None
 
@@ -260,7 +284,12 @@ class pkmap(object):
     def preview(self, **args):
         """
         docstring
+
+        not working well by now
         """
+        # TODO: add violin plot on 9 apps of each House
+        # to check if multi-apps are recorded in a single channel
+
         plot_time(self, house_number=self.house_number, 
                   app_name=self.app_name,
                   **args)
@@ -336,6 +365,7 @@ class pkmap(object):
            sel_ac = None,
            no_plot: bool=False,
            fig_types: Iterable=(),
+           **args
            ):
         '''
         obj: str (app name) or int (1 ~ n)
@@ -347,9 +377,14 @@ class pkmap(object):
         sel_ac: str('active, reactive, apparent)
             select a specific ac_type to analysis
 
+        **args:
+        no_margin: bool=False
+            draw heatmap only without margin marks if is True
+
         === good luck! ===
         '''
 
+        print('\trun `BM()`!')
         # fix input
         if sel_ac is None:
             sel_ac = list(self.avail_ac)[0]
@@ -371,10 +406,6 @@ class pkmap(object):
             print('get caculated obj as `{}`'.format(obj))
         else:
             raise ValueError('get `obj` as {} is not acceptable'.format(obj))
-        
-        if not fig_types:
-            fig_types = ('png', 'svg')
-
 
         data0 = self.data0[sel_ac]
         data_s = data0[obj]
@@ -387,44 +418,63 @@ class pkmap(object):
         print('{} + {} = {}'.format(len(data_ra.index), len(data_rb.index), 
                                     len(data_ra.index)+len(data_rb.index)))
 
+        '''
+        extract data_ra and data_rb
+        '''
         for key, data0 in zip(('ra', 'rb'), [data_ra, data_rb]):
-            key = '('.join([obj, key])
+            key = '-'.join([obj, key])
             self.data0[key] = data0
             self.appQ[key] = len(data0.columns)
             self.ins_name[key] = tuple(data0.columns)
-            self.avail_ac.add(key)
 
             self.data2[key] = gen_PKMap(self, key=key, model=self.model)
-            if not no_plot:
+            self.avail_key.add(key)
+            # if not no_plot:
+            if False:
                 self.plot(key=key, fig_types=fig_types)
-        
             # remove 0
-            self.data2[key] = {it[0]:(it[1] if it[1]>0 else 1) for it in self.data2[key].items()}
+            # self.data2[key] = {it[0]:(it[1] if it[1]>0 else 1) for it in self.data2[key].items()}
 
-        data_ra = self.data2['('.join([obj,'ra'])]
-        data_rb = self.data2['('.join([obj, 'rb'])]
+        data_ra = self.data2['-'.join([obj,'ra'])]
+        data_rb = self.data2['-'.join([obj, 'rb'])]
+        data2 = {k:data_ra[k] + data_rb[k] for k in data_ra.keys()}
         t_ra = sum(list(data_ra.values()))
         t_rb = sum(list(data_rb.values()))
         print('get (t_ra, t_rb) as ({}, {})'.format(t_ra, t_rb))
         sbm = {}
         for sc in data_ra.keys():
             # State-Combination, like '00110110' for appQ is 9
-            y1 = log10(data_ra[sc])/log10(t_ra)
-            y2 = log10(data_rb[sc])/log10(t_rb)
-            # y1 = data_ra[sc]/t_ra
-            # y2 = data_rb[sc]/t_rb
-            # print('(y1, y2) is {}'.format((y1, y2)))
-            sbm_ = (sqrt(2)*y1 + 1)/(sqrt(2)*y2 + 1) -sqrt(2)
-            sbm[sc] = log(sbm_ + sqrt(2))/log(1+sqrt(2))
+            if data2[sc] == 0:
+                sbm[sc] = None
+            else:
+                if data_ra[sc] == 0:
+                    y1 = 0
+                    y2 = log10(data_rb[sc])/log10(data2[sc])
+                elif data_rb[sc] == 0:
+                    y1 = log10(data_ra[sc])/log10(data2[sc])
+                    y2 = 0
+                else:
+                    y1 = log10(data_ra[sc])/log10(data2[sc])
+                    y2 = log10(data_rb[sc])/log10(data2[sc])
+                    # y1 = data_ra[sc]/t_ra
+                    # y2 = data_rb[sc]/t_rb
+                # print('(y1, y2) is {}'.format((y1, y2)))
+                # value of smb_ from -1 to +1
+                sbm_ = (sqrt(2)*y1 + 1)/(sqrt(2)*y2 + 1) -sqrt(2)
+                sbm[sc] = log(sbm_ + sqrt(2))/log(1+sqrt(2))
             # print('SBM[{}] <- {}'.format(sc, sbm_))
-        bm = sum(abs(list(sbm.values())))
-        bm /= 2**(self.appQ[sel_ac]-1)
+        bm = sum(abs([k for k in sbm.values() if k]))
+        s = sum([k > 2 for k in data2.values()])
+        bm /= s
+        print('sum([k > 2 for k in data2]) is {}'.format(s))
         print('get BM as {}'.format(bm))
 
-        key = '('.join([obj, 'bm'])
+        key = '-'.join([obj, 'bm'])
         self.data2[key] = sbm
         self.bm[key] = sbm
-        do_plot_BM(self, key=key, fig_types=('.png', '.svg'), no_show=no_plot)
+        self.avail_key.add(key)
+
+        do_plot(self, key=key, fig_types=fig_types, no_show=no_plot, **args)
 
         return bm
 

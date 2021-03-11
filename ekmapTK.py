@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # === ekmapTK.py ===
-# ekmapTK using pandas.DataFrame
+# utils for PKMap using pandas.DataFrame
 #   with the help of multiprocess
 
 from numpy import sum
@@ -28,8 +28,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpat
 from matplotlib.colors import LogNorm
 from matplotlib.colors import ListedColormap
-from matplotlib.colors import LinearSegmentedColormap as Colormap
-# import seaborn as sn
+from matplotlib.colors import LinearSegmentedColormap
+import seaborn as sns
 
 # python embedded library
 from copy import copy
@@ -40,6 +40,7 @@ from os import listdir
 import os
 from collections.abc import Iterable 
 
+# private library
 from .appliance_data import appliance_data
 from .pkmap_data import AD, pat_data, app_data
 
@@ -204,7 +205,7 @@ def GMI(n, labels:Iterable=()):
         if len(labels) < n:
             raise ValueError('require {} labels, but got {} in {}'.format(n, len(labels), labels))
         for m in my:
-            m2 = tuple([tuple((array(mt)*2**ny-1)/2) for mt in m])
+            m2 = tuple([tuple((array(mt)*2**ny)/2) for mt in m])
             if tk:
                 L[labels[An-1]] = (nA_L, m2)
                 tk ^= 1
@@ -218,7 +219,7 @@ def GMI(n, labels:Iterable=()):
     else:
         # labels is empty, use default: (A1, A2, ...)
         for m in my:
-            m2 = tuple([tuple((array(mt)*2**ny-1)/2) for mt in m])
+            m2 = tuple([tuple((array(mt)*2**ny)/2) for mt in m])
             if tk:
                 L['A'+str(An)] = (nA_L, m2)
                 tk ^= 1
@@ -236,7 +237,7 @@ def GMI(n, labels:Iterable=()):
     B, T = {}, {}           # output container
     if labels:
         for m in mx:
-            m2 = tuple([tuple((array(mt)*2**nx-1)/2) for mt in m])
+            m2 = tuple([tuple((array(mt)*2**nx)/2) for mt in m])
             # print((m, m2))
             if tk:
                 B[labels[An-1]] = (nA_B, m2)
@@ -250,7 +251,7 @@ def GMI(n, labels:Iterable=()):
                 nA_T -= 1
     else:
         for m in mx:
-            m2 = tuple([tuple((array(mt)*2**nx-1)/2) for mt in m])
+            m2 = tuple([tuple((array(mt)*2**nx)/2) for mt in m])
             # print((m, m2))
             if tk:
                 B['A'+str(An)] = (nA_B, m2)
@@ -282,15 +283,15 @@ def beauty_time(time):
     str_time = ""
     if time > 3600 * 24:
         (d, time) = divmod(time, 3600*24)
-        str_time += f"{int(d)}d "
+        str_time += "{}d ".format(int(d))
     if time > 3600:
         (h, time) = divmod(time, 3600)
-        str_time += f"{int(h)}h "
+        str_time += "{}h ".format(int(h))
     if time > 60:
         (m, time) = divmod(time, 60)
-        str_time += f"{int(m)}m "
+        str_time += "{}m ".format(int(m))
     (s, ms) = divmod(time*1000, 1000)
-    str_time += f"{int(s)}s {int(ms)}ms"
+    str_time += "{}s {}ms".format(int(s), int(ms))
 
     return str_time
 
@@ -479,10 +480,15 @@ def gen_PKMap2(self, data0=None, key:str='active',
         if not n_slice:
             cache_name = '.'.join([cache_name, 'txt'])
             for dirpath,dirnames,files in os.walk(self.cache_dir):
-                if cache_name in files:
-                    with open(os.path.join(self.cache_dir, cache_name), 'r') as f:
+                # I do this for reason
+                # see in https://github.com/PKMap/PKMap/issues/3#issue-824152220
+                files_l = array([x.lower() for x in files])
+                cache_l = cache_name.lower()
+                if cache_l in files_l:
+                    cache_name2 = array(files)[files_l == cache_l][0]
+                    with open(os.path.join(self.cache_dir, cache_name2), 'r') as f:
                         data2 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
-                    print('='*6+' read from '+cache_name+'! '+'='*6)
+                    print('='*6+' read from '+cache_name2+'! '+'='*6)
                     return data2
                 else:
                     print('cache_name is {}'.format(cache_name))
@@ -595,7 +601,6 @@ def gen_PKMap2(self, data0=None, key:str='active',
         save_file = True
         if save_file and not n_slice:
             # already have `cache_name`
-            print('saving cache: {}'.format(cache_name))
             with open(os.path.join(self.cache_dir, cache_name), 'w') as f:
                 for k in data2.items():
                     f.write(':'.join([k[0], str(k[1])]) + '\n')
@@ -604,7 +609,8 @@ def gen_PKMap2(self, data0=None, key:str='active',
     return data2
 
 
-def read_REFIT(file_path="", save_file=False, n_slice=None, no_count: bool=False):
+def read_REFIT(file_path="", n_slice=None, 
+               save_file: bool=False, no_count:bool=False):
     """
     ready data to plot
 
@@ -729,7 +735,7 @@ def read_REFIT2(self, no_count=False):
     3. median filtrate by app
     4. filtrate to on/off data
     """
-
+    
     global TOTAL_LINE
     global FILE_PATH
     global file_name
@@ -879,7 +885,7 @@ def new_order(ahead=(), appQ=9):
     return tuple(order2)
 
 
-def do_plot_single2(self, key: str='active', cmap='inferno', fig_types=(), no_show=False,
+def do_plot_single2(self, key, cmap='inferno', fig_types=(), no_show=False,
                    titles="", pats=[]):
     """
     plot WKMap with markers around
@@ -1054,7 +1060,8 @@ def do_plot_single2(self, key: str='active', cmap='inferno', fig_types=(), no_sh
 
 
 def do_plot_single3(self, data3=None, key: str='active', 
-                    cmap='inferno', fig_types=(), no_show=False,
+                    cmap='inferno_r', fig_types=(), 
+                    no_show: bool=False, no_margin: bool=False,
                     titles="", pats=[]):
     """
         a "colorbar'-involved version
@@ -1066,14 +1073,14 @@ def do_plot_single3(self, data3=None, key: str='active',
     """
     # global file_name
     global basepath
-    file_name = '_'.join(['PKMap', self.dataset, self.house_name, key, titles])
+    file_name = '_'.join(['PKMap', self.dataset, self.house_name, key])
     print('file_name is `{}`'.format(file_name))
     
     # fill in data
     if data3 is None:
         data3 = self.data2[key]
-    # appQ = len(tuple(data3.keys())[0])  # total number of appliance
-    appQ = self.appQ[key]
+    appQ = len(tuple(data3.keys())[0])  # total number of appliance
+    # appQ = self.appQ[key]
     ny = int(appQ / 2)
     nx = appQ - ny
 
@@ -1109,31 +1116,34 @@ def do_plot_single3(self, data3=None, key: str='active',
     # print(f'{((n_L+n_R)*wdx+lx, (n_T+n_B)*wdy+ly)}')
     # print(f'{(n_L*wdx, lx, n_R*wdx)}')
     # print(f'{(n_T*wdy, ly, n_B*wdy)}')
-    figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
-    cbw = 0.3      # width of color bar
-    figsize[2] = figsize[0] + cbw + 0.6
-    # kill the floating error
-    figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
-    fig = plt.figure(figsize=figsize, 
-                    constrained_layout=True)
-    print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
-    # fig = plt.figure(figsize=(ly, lx))
-    gs = fig.add_gridspec(nrows=3, ncols=4, 
-                width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
-                height_ratios=(n_T*wdy, ly, n_B*wdy),
-                left=0, right=1, bottom=0, top=1,
-                wspace=0.02, hspace=0.06)
 
-    ax = fig.add_subplot(gs[1,1])
-    ax0 = copy(ax)
+    if not no_margin:
+        figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
+        cbw = 0.3      # width of color bar
+        figsize[2] = figsize[0] + cbw + 0.6
+        # kill the floating error
+        figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
+        fig = plt.figure(figsize=figsize, 
+                        constrained_layout=True)
+        print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
+        # fig = plt.figure(figsize=(ly, lx))
+        gs = fig.add_gridspec(nrows=3, ncols=4, 
+                    width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
+                    height_ratios=(n_T*wdy, ly, n_B*wdy),
+                    left=0, right=1, bottom=0, top=1,
+                    wspace=0.02, hspace=0.02)
+
+        ax = fig.add_subplot(gs[1,1])
+    else:
+        figsize = (lx, ly)
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot()
+        file_name = '_'.join([file_name, 'N'])
+        gs = None
+
     # ====== `ekmap' is the contant of a subplot ======
     ekmap = KM(ny, nx)      # preparing a container
-    ekback = KM(ny, nx)     # backgroud container
-    # ek = 1
     vmax = sum(list(data3.values()))
-    # vmax = max(tuple(data3.values()))
-    # vmin = min(tuple(data3.values()))
-    # vmax = 110
     vmin = 0.8
 
     for _ind in ekmap.index:
@@ -1141,25 +1151,33 @@ def do_plot_single3(self, data3=None, key: str='active',
             d = data3[_ind + _col]
             if d:
                 # d is larger than 0
-                # ekmap.loc[_ind, _col] = log(d/ek)
                 ekmap.loc[_ind, _col] = d
             else:
                 # d equals 0
-                # ax.fill([])
-                ekback.loc[_ind, _col] = 0.06
-
+                ekmap.loc[_ind, _col] = None
+    print(ekmap)
     # print(f'{(vmax, vmin)=}')
-    '''b_0 = -0.5
-    b_x = 2**nx-0.5
-    b_y = 2**ny-0.5
-    ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch='\\'))
-    '''
+    b_0 = 0.01
+    b_x = 2**nx-b_0
+    b_y = 2**ny-b_0
+    my_pat = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch=r'/'))
+    my_pay = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, ec='w', lw=1.6))
+    
     # colors: `azure`(cyan), `aliceblue`, `ghostwhite`
-    ax.imshow(ekback, cmap=ListedColormap(['aliceblue']),vmin=0, vmax=1)
-    im_main = ax.imshow(ekmap, alpha=1, cmap=cmap, 
+    '''
+    use pcolormesh() instead of imshow()
+    for better bitmap saving
+    imshow() won't save bitmaps
+    '''
+    my_img = ax.pcolormesh(ekmap, cmap=cmap, 
                         vmin=vmin, 
                         vmax=vmax, 
                         norm=LogNorm())
+    ax.invert_yaxis()
+    my_pat.set_zorder(0.1)
+    my_pay.set_zorder(0.2)
+    my_img.set_zorder(1.2)
+    
     ax.set_yticks(arange(2**ny))
     ax.set_xticks(arange(2**nx))
     ax.set_yticklabels(ekmap.index.values)
@@ -1169,70 +1187,68 @@ def do_plot_single3(self, data3=None, key: str='active',
         for pat in pats:
             ax.add_patch(copy(pat))
     ax.axis('off')
-
-    for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
-        # S = L, R, B, T
-        if xy in ('B', 'T'):
-            ax_S = fig.add_subplot(pl, sharex=ax)
-        elif xy in ('L', 'R'):
-            ax_S = fig.add_subplot(pl, sharey=ax)
-        else:
-            ax_S = fig.add_subplot(pl)
-        # print(f'{S}')
-        cf1 = wd1
-        cf2 = 0.1
-        for margin in S.items():
-            mag_n = margin[0]
-            # dict.key, like `A1'
-            mag_v = margin[1]
-            # dict.value like `(2, ((3.5, 7.48),))'
-            # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
-            ofst = mag_v[0]     # offset, a number start from 1
-            args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
-                        'family':'monospace', 'size':'x-large'}
-            for ind in mag_v[1]:
-                # `mag_v[1]' like `((3.5, 7.48),)'
-                # or `((0.5, 2.5), (4.5, 6.5))'
-                m_st = ind[0]           # start
-                m_itl = ind[1] - ind[0]     # interval
-                m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
-                m_ty = cf1*ofst - cf2       # vartical to the axis
-                if   xy in ('L', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
-                    ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
-                elif xy in ('R', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
-                    ax_S.text(m_ty, m_tx, mag_n, **args_text)
-                elif xy in ('B', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
-                    ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
-                elif xy in ('T', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
-                    ax_S.text(m_tx, m_ty, mag_n, **args_text)
-
-        if   xy in ('L', ):
-            ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
-        elif xy in ('R', ):
-            ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
-        elif xy in ('B', ):
-            ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
-        elif xy in ('T',):
-            ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
-            if titles:
-                ax_S.set_title(titles, size=24)
-        ax_S.axis('off')
-
-    axn = fig.add_subplot(gs[1,3])
-    cbar = fig.colorbar(im_main, cax=axn, shrink=0.00001)
-    cbar.ax.set_ylabel('counts ({} total)'.format(vmax), size='x-large')
     
-    # fig.tight_layout()
-    # if not isinstance(fig_types, Iterable):
-    #     fig_types = (fig_types, )
+    if not no_margin:
+        for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
+            # S = L, R, B, T
+            if xy in ('B', 'T'):
+                ax_S = fig.add_subplot(pl, sharex=ax)
+            elif xy in ('L', 'R'):
+                ax_S = fig.add_subplot(pl, sharey=ax)
+            else:
+                ax_S = fig.add_subplot(pl)
+            # print(f'{S}')
+            cf1 = wd1
+            cf2 = 0.1
+            for margin in S.items():
+                mag_n = margin[0]
+                # dict.key, like `A1'
+                mag_v = margin[1]
+                # dict.value like `(2, ((3.5, 7.48),))'
+                # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
+                ofst = mag_v[0]     # offset, a number start from 1
+                args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
+                            'family':'monospace', 'size':'x-large'}
+                for ind in mag_v[1]:
+                    # `mag_v[1]' like `((3.5, 7.48),)'
+                    # or `((0.5, 2.5), (4.5, 6.5))'
+                    m_st = ind[0]           # start
+                    m_itl = ind[1] - ind[0]     # interval
+                    m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
+                    m_ty = cf1*ofst - cf2       # vartical to the axis
+                    if   xy in ('L', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
+                        ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
+                    elif xy in ('R', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
+                        ax_S.text(m_ty, m_tx, mag_n, **args_text)
+                    elif xy in ('B', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
+                        ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
+                    elif xy in ('T', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
+                        ax_S.text(m_tx, m_ty, mag_n, **args_text)
+
+            if   xy in ('L', ):
+                ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
+            elif xy in ('R', ):
+                ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
+            elif xy in ('B', ):
+                ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
+            elif xy in ('T',):
+                ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
+                if titles:
+                    ax_S.set_title(titles, size=24)
+            ax_S.axis('off')
+
+        axn = fig.add_subplot(gs[1,3])
+        cbar = fig.colorbar(my_img, cax=axn)
+        cbar.ax.set_ylabel('counts ({} total)'.format(vmax), size='x-large')    
+
     for fig_type in fig_types:
         plt.pause(1e-13)
         # see in https://stackoverflow.com/questions/62084819/
@@ -1251,7 +1267,8 @@ def do_plot_single3(self, data3=None, key: str='active',
 
 
 def do_plot_BM(self, key: str, 
-                    cmap='inferno', fig_types=(), no_show=False,
+                    cmap=None, fig_types=(), 
+                    no_show: bool=False, no_margin: bool=False,
                     titles="", pats=[]):
     """
         print bm dict
@@ -1266,8 +1283,8 @@ def do_plot_BM(self, key: str,
     """
     # global file_name
     global basepath
-    file_name = '_'.join(['PKMap', self.dataset, self.house_name, key, titles])
-    print('file_name is `{}`'.format(file_name))
+    file_name = '_'.join(['PKMap', self.dataset, self.house_name, key])
+    print('`BM` file_name is `{}`'.format(file_name))
     
     # fill in data
     data3 = self.data2[key]
@@ -1308,42 +1325,60 @@ def do_plot_BM(self, key: str,
     # print(f'{((n_L+n_R)*wdx+lx, (n_T+n_B)*wdy+ly)}')
     # print(f'{(n_L*wdx, lx, n_R*wdx)}')
     # print(f'{(n_T*wdy, ly, n_B*wdy)}')
-    figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
-    cbw = 0.3      # width of color bar
-    figsize[2] = figsize[0] + cbw + 0.6
-    # kill the floating error
-    figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
-    fig = plt.figure(figsize=figsize, 
-                    constrained_layout=True)
-    print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
-    # fig = plt.figure(figsize=(ly, lx))
-    gs = fig.add_gridspec(nrows=3, ncols=4, 
-                width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
-                height_ratios=(n_T*wdy, ly, n_B*wdy),
-                left=0, right=1, bottom=0, top=1,
-                wspace=0.02, hspace=0.06)
 
-    ax = fig.add_subplot(gs[1,1])
-    # ax0 = copy(ax)
+    if not no_margin:
+        figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
+        cbw = 0.3      # width of color bar
+        figsize[2] = figsize[0] + cbw + 0.6
+        # kill the floating error
+        figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
+        fig = plt.figure(figsize=figsize, 
+                        constrained_layout=True)
+        print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
+        # fig = plt.figure(figsize=(ly, lx))
+        gs = fig.add_gridspec(nrows=3, ncols=4, 
+                    width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
+                    height_ratios=(n_T*wdy, ly, n_B*wdy),
+                    left=0, right=1, bottom=0, top=1,
+                    wspace=0.02, hspace=0.02)
+
+        ax = fig.add_subplot(gs[1,1])
+    else:
+        figsize = (lx, ly)
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot()
+        file_name = '_'.join([file_name, 'N'])
+        gs = None
+
     # ====== `ekmap' is the contant of a subplot ======
     ekmap = KM(ny, nx)      # preparing a container
-    
     vmax = 1
     vmin = -1
 
     for _ind in ekmap.index:
         for _col in ekmap.columns:
-            d = data3[_ind + _col]
-            ekmap.loc[_ind, _col] = d
+            ekmap.loc[_ind, _col] = data3[_ind + _col]
     print(ekmap)
     # print(f'{(vmax, vmin)=}')
-    
+    b_0 = 0.01
+    b_x = 2**nx-b_0
+    b_y = 2**ny-b_0
+    my_pat = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch=r'/'))
+    my_pat2 = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y,fill=False, ec='w', lw=1.2))
     # colors: `azure`(cyan), `aliceblue`, `ghostwhite`
-    cmap2 = Colormap.from_list('mycol1', ['indigo', 'c', 'ivory', 'darkorange', 'maroon'])
-    im_main = ax.imshow(ekmap, alpha=1, cmap=cmap2, 
+    mycols = ['paleturquoise', 'cornflowerblue', 'indigo', 'tomato', 'peachpuff']
+    # k = LinearSegmentedColormap.from_list('mycl', list(zip([0, 0.3,0.5,0.7,1], mycols)))
+    k = LinearSegmentedColormap.from_list('mycl', mycols)
+    # k = sns.color_palette('icefire', as_cmap=True)
+    my_img = ax.pcolormesh(ekmap, cmap=k, 
                         vmin=vmin, 
                         vmax=vmax, 
                         )
+    ax.invert_yaxis()
+    my_pat.set_zorder(0.1)
+    my_pat2.set_zorder(0.2)
+    my_img.set_zorder(1.2)
+
     ax.set_yticks(arange(2**ny))
     ax.set_xticks(arange(2**nx))
     ax.set_yticklabels(ekmap.index.values)
@@ -1354,69 +1389,71 @@ def do_plot_BM(self, key: str,
             ax.add_patch(copy(pat))
     ax.axis('off')
 
-    for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
-        # S = L, R, B, T
-        if xy in ('B', 'T'):
-            ax_S = fig.add_subplot(pl, sharex=ax)
-        elif xy in ('L', 'R'):
-            ax_S = fig.add_subplot(pl, sharey=ax)
-        else:
-            ax_S = fig.add_subplot(pl)
-        # print(f'{S}')
-        cf1 = wd1
-        cf2 = 0.1
-        for margin in S.items():
-            mag_n = margin[0]
-            # dict.key, like `A1'
-            mag_v = margin[1]
-            # dict.value like `(2, ((3.5, 7.48),))'
-            # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
-            ofst = mag_v[0]     # offset, a number start from 1
-            args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
-                        'family':'monospace', 'size':'x-large'}
-            for ind in mag_v[1]:
-                # `mag_v[1]' like `((3.5, 7.48),)'
-                # or `((0.5, 2.5), (4.5, 6.5))'
-                m_st = ind[0]           # start
-                m_itl = ind[1] - ind[0]     # interval
-                m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
-                m_ty = cf1*ofst - cf2       # vartical to the axis
-                if   xy in ('L', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
-                    ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
-                elif xy in ('R', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
-                    ax_S.text(m_ty, m_tx, mag_n, **args_text)
-                elif xy in ('B', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
-                    ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
-                elif xy in ('T', ):
-                    ax_S.add_patch(plt.Rectangle(
-                        (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
-                    ax_S.text(m_tx, m_ty, mag_n, **args_text)
+    if not no_margin:
+        for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
+            # S = L, R, B, T
+            if xy in ('B', 'T'):
+                ax_S = fig.add_subplot(pl, sharex=ax)
+            elif xy in ('L', 'R'):
+                ax_S = fig.add_subplot(pl, sharey=ax)
+            else:
+                ax_S = fig.add_subplot(pl)
+            # print(f'{S}')
+            cf1 = wd1
+            cf2 = 0.1
+            for margin in S.items():
+                mag_n = margin[0]
+                # dict.key, like `A1'
+                mag_v = margin[1]
+                # dict.value like `(2, ((3.5, 7.48),))'
+                # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
+                ofst = mag_v[0]     # offset, a number start from 1
+                args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
+                            'family':'monospace', 'size':'x-large'}
+                for ind in mag_v[1]:
+                    # `mag_v[1]' like `((3.5, 7.48),)'
+                    # or `((0.5, 2.5), (4.5, 6.5))'
+                    m_st = ind[0]           # start
+                    m_itl = ind[1] - ind[0]     # interval
+                    m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
+                    m_ty = cf1*ofst - cf2       # vartical to the axis
+                    if   xy in ('L', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
+                        ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
+                    elif xy in ('R', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
+                        ax_S.text(m_ty, m_tx, mag_n, **args_text)
+                    elif xy in ('B', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
+                        ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
+                    elif xy in ('T', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
+                        ax_S.text(m_tx, m_ty, mag_n, **args_text)
 
-        if   xy in ('L', ):
-            ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
-        elif xy in ('R', ):
-            ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
-        elif xy in ('B', ):
-            ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
-        elif xy in ('T',):
-            ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
-            if titles:
-                ax_S.set_title(titles, size=24)
-        ax_S.axis('off')
+            if   xy in ('L', ):
+                ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
+            elif xy in ('R', ):
+                ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
+            elif xy in ('B', ):
+                ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
+            elif xy in ('T',):
+                ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
+                if titles:
+                    ax_S.set_title(titles, size=24)
+            ax_S.axis('off')
 
-    axn = fig.add_subplot(gs[1,3])
-    cbar = fig.colorbar(im_main, cax=axn, shrink=0.00001)
-
-    # this cause a error but do not know why
-    # RuntimeError: In draw_glyphs_to_bitmap: Could not convert glyph to bitmap
-    # cbar.ax.set_ylabel('get bm is: {}'.format(self.bm[key]))
+        axn = fig.add_subplot(gs[1,3])
+        cbar = fig.colorbar(my_img, cax=axn)
     
+    '''
+    this cause a error but do not know why
+    RuntimeError: In draw_glyphs_to_bitmap: Could not convert glyph to bitmap
+    cbar.ax.set_ylabel('get bm is: {}'.format(self.bm[key]))
+    '''
     
     # print(axn.set_ylim(top=30))
     # fig.tight_layout()
@@ -1439,7 +1476,7 @@ def do_plot_BM(self, key: str,
     return fig
 
 
-def do_plot3(data3, cmap='inferno', fig_types=(), no_show=False,
+def do_plot3(data3, cmap='inferno_r', fig_types=(), no_show=False,
                    titles="", pats=[]):
     """
     plot WKMap with 3D surface
@@ -1691,9 +1728,9 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), no_show=False,
 
 
 def do_plot(self, data2=None, key: str='active', 
-            ahead=(), cmap='inferno', 
+            ahead=(), cmap='inferno_r', 
             fig_types=(), no_show=False,
-            titles="", pats=[]):
+            titles="", pats=[], **args):
     """
     do plot, save EKMap figs 
 
@@ -1719,6 +1756,10 @@ def do_plot(self, data2=None, key: str='active',
             must have same size as `data2' (enumerate together)
     pats: add rectangle if needed, an enumerable object
 
+    **args:
+    no_margin: bool, 
+        draw heatmap only without margin marks if is True
+
     return: no return
 
     ====== WARNING ======
@@ -1734,43 +1775,55 @@ def do_plot(self, data2=None, key: str='active',
         # type(data2) is a list
         appQ = len(tuple(data2[0].keys())[0])
     '''     # no need in this func
-    
+
     '''order_ind = new_order(ahead, self.appQ[key])
     '''     # no used feature
     # input correction
     if isinstance(fig_types, str):
         if fig_types.lower() in ('d', 'default', 'defautl', 'defualt', 'defuatl'):
             fig_types = ('png', 'svg')
-        fig_types = (fig_types, )
+        else:
+            fig_types = (fig_types, )
     # 'png' --> '.png'
     fig_types = tuple([t if t.startswith('.') else '.'.join(['',t]) for t in fig_types])
-    
+
     # function reconsitution
     if isinstance(data2, dict):
-        # data2 is single
-        '''data3 = {''.join([key[s] for s in order_ind]): data2[key]
-                 for key in data2.keys()}
-        '''
-        print('do_plot_single')
-        do_plot_single3(self, data3=data2, key=key, 
-                        cmap=cmap, fig_types=fig_types, 
-                        no_show=no_show,
-                        titles=titles, pats=pats)
+        if isinstance(list(data2.values())[0], dict):
+            # data2 is a dict of a dict
+            raise('a dict of dict: {} is not welcomed'.format(data2))
+        else:
+            # data2 is single
+            '''data3 = {''.join([key[s] for s in order_ind]): data2[key]
+                    for key in data2.keys()}
+            '''
+            if key.endswith('bm'):
+                print('\tdo_plot_BM')
+                do_plot_BM(self, key=key, 
+                    cmap=cmap, fig_types=fig_types, 
+                    no_show=no_show,
+                    titles=titles, pats=pats, **args)
+            else:
+                print('\tdo_plot_single')
+                do_plot_single3(self, data3=data2, key=key, 
+                                cmap=cmap, fig_types=fig_types, 
+                                no_show=no_show,
+                                titles=titles, pats=pats, **args)
     elif isinstance(data2, Iterable) and isinstance(data2[0], dict):
         # data2 is a list of dict
         '''data3 = tuple({''.join([key[s] for s in order_ind]): datax[key]
                        for key in datax.keys()} for datax in data2)
         '''
-        print('do_plot_multiple')
+        print('\tdo_plot_multiple')
         do_plot_multi(data2, 
                       cmap=cmap, fig_types=fig_types, 
                       no_show=no_show,
-                      titles=titles, pats=pats)
+                      titles=titles, pats=pats, **args)
 
     else:
         raise('get unknown type of data2: {}'.format(type(data2)))
 
-    return 0
+    return None
 
 
 def do_plot_time(self, cmap='inferno', fig_types=(), no_show=False,
