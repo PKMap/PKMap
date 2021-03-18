@@ -37,7 +37,7 @@ from time import time
 
 from re import findall
 from os import listdir
-import os
+import os, sys
 from collections.abc import Iterable 
 
 # private library
@@ -51,6 +51,17 @@ val0 = {}
 data0 = DataFrame([])
 file_name = 'Housex'
 basepath = r'C:\Users\CVLab\Documents\nilm\expm1'
+
+
+class NoPrints:
+    # copy from https://cloud.tencent.com/developer/ask/188486
+    def __enter__(self, do0not=True):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
 
 
 def line_count(file_path):
@@ -272,8 +283,6 @@ def beauty_time(time):
     beauty time string
     time: time in seconds
     return: time in string
-
-    warning: using a feature published in python 3.8
     """
     d = 0
     h = 0
@@ -282,15 +291,15 @@ def beauty_time(time):
     ms = 0
     str_time = ""
     if time > 3600 * 24:
-        (d, time) = divmod(time, 3600*24)
+        d, time = divmod(time, 3600*24)
         str_time += "{}d ".format(int(d))
     if time > 3600:
-        (h, time) = divmod(time, 3600)
+        h, time = divmod(time, 3600)
         str_time += "{}h ".format(int(h))
     if time > 60:
-        (m, time) = divmod(time, 60)
+        m, time = divmod(time, 60)
         str_time += "{}m ".format(int(m))
-    (s, ms) = divmod(time*1000, 1000)
+    s, ms = divmod(time*1000, 1000)
     str_time += "{}s {}ms".format(int(s), int(ms))
 
     return str_time
@@ -418,7 +427,7 @@ def gen_PKMap(data0, model: str='thrd', n_slice=None):
     x2 = (data0.index[x1[k]:x1[k+1]] for k in range(PN))
     # x2 is a generator of each scope in a tuple of two int
     print('slicinng with {}'.format(x1))
-    # result = list(range(PN))
+    # result = list(rangev(PN))
     with tqdm(leave=False, bar_format="Counting ...") as pybar:
         # pooling will call gen_PKMap() instead of do_count
         # but do well in Jan
@@ -468,12 +477,23 @@ def gen_PKMap2(self, data0=None, key:str='active',
     """
         a self-transfering version
     data0: a dict of PKMap
-        do not use it
+        use data0 to force counting
+
+        offering 
     """
     global TOTAL_LINE
     print('\t run `gen_PKMap2`!')
 
-    if not no_save: 
+
+    if data0 is None:
+        data0 = self.data0[key]
+        no_old = False       # caculate new data instead of old data from file
+    else:
+        no_old = True
+        print('\t\ano_old is `True`!')
+
+
+    if not no_old and not no_save: 
         # check cache
         cache_name = '_'.join(['PKcache', self.dataset, self.house_name, key])
         # if already have, return directly
@@ -490,13 +510,10 @@ def gen_PKMap2(self, data0=None, key:str='active',
                         data2 = {line.split(':')[0]:int(line.split(':')[1]) for line in f.readlines()}
                     print('='*6+' read from '+cache_name2+'! '+'='*6)
                     return data2
-                else:
-                    print('cache_name is {}'.format(cache_name))
+            else:
+                print('cache_name is {}'.format(cache_name))
     else:
         cache_name = ''
-
-    if data0 is None:
-        data0 = self.data0[key]
 
     # print(data0)
     if model.lower() in ('thrd', 'threshold', 'thresholds', 'td'):
@@ -505,7 +522,7 @@ def gen_PKMap2(self, data0=None, key:str='active',
         # transfer to on/off value
         # dx = data0.loc[:, 'Appliance1': 'Appliance9']
         # data0.loc[:, 'Appliance1': 'Appliance9'] = (dx > threshold)
-        data0 = (data0>threshold)
+        data0 = data0>threshold
         # print(data0)
     elif model.lower() in ('kmean', 'kmeans', 'km'):
 
@@ -596,7 +613,7 @@ def gen_PKMap2(self, data0=None, key:str='active',
         data2 = None
         print('unknown `n_slice`: {}'.format(n_slice))
 
-    if not no_save:
+    if not no_old and not no_save:
         # save data2
         save_file = True
         if save_file and not n_slice:
@@ -818,7 +835,7 @@ def read_REFIT2(self, no_count=False):
         with open(file_dir + '/' + '.txt', 'w') as f:
             for k in data2.items():
                 f.write(':'.join([k[0], str(k[1])]) + '\n')
-        print('='*6+' saved '+ cache_name +'! '+'='*6)
+        print('='*6, 'saved '+ cache_name +'!', '='*6)
     elif save_file:
         cache_name = 'EKMap' + file_name[5:] + '_'
         for nslice, data2 in zip(range(n_slice), data2):
@@ -1266,7 +1283,7 @@ def do_plot_single3(self, data3=None, key: str='active',
     return fig
 
 
-def do_plot_BM(self, key: str, 
+def do_plot_BM(self, data3=None, key: str='active', 
                     cmap=None, fig_types=(), 
                     no_show: bool=False, no_margin: bool=False,
                     titles="", pats=[]):
@@ -1287,7 +1304,8 @@ def do_plot_BM(self, key: str,
     print('`BM` file_name is `{}`'.format(file_name))
     
     # fill in data
-    data3 = self.data2[key]
+    if data3 is None:
+        data3 = self.data2[key]
     appQ = len(tuple(data3.keys())[0])  # total number of appliance
     # appQ = self.appQ[key]
     ny = int(appQ / 2)
@@ -1366,7 +1384,7 @@ def do_plot_BM(self, key: str,
     my_pat = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch=r'/'))
     my_pat2 = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y,fill=False, ec='w', lw=1.2))
     # colors: `azure`(cyan), `aliceblue`, `ghostwhite`
-    mycols = ['paleturquoise', 'cornflowerblue', 'indigo', 'tomato', 'peachpuff']
+    mycols = ['lightcyan', 'cornflowerblue', 'indigo', 'tomato', 'linen']
     # k = LinearSegmentedColormap.from_list('mycl', list(zip([0, 0.3,0.5,0.7,1], mycols)))
     k = LinearSegmentedColormap.from_list('mycl', mycols)
     # k = sns.color_palette('icefire', as_cmap=True)
@@ -1769,6 +1787,9 @@ def do_plot(self, data2=None, key: str='active',
     """
     if data2 is None:
         data2 = self.data2[key]
+        data2p = None       # data2 to pass (passing not None)
+    else:
+        data2p = data2
     '''try:
         appQ = len(tuple(data2.keys())[0])  # total number of appliance
     except AttributeError as identifier:
@@ -1799,7 +1820,7 @@ def do_plot(self, data2=None, key: str='active',
             '''
             if key.endswith('bm'):
                 print('\tdo_plot_BM')
-                do_plot_BM(self, key=key, 
+                do_plot_BM(self, data3=data2p, key=key, 
                     cmap=cmap, fig_types=fig_types, 
                     no_show=no_show,
                     titles=titles, pats=pats, **args)
@@ -1973,3 +1994,7 @@ if __name__ == "__main__":
         print((ind))
     t = '='*6
     print(t + ' finished ' + t)
+# elif __name__ == "__mp_main__":
+#     print('`utils` run as {}!'.format(__name__))
+else:
+    print('`utils` run as name: {} but main'.format(__name__))

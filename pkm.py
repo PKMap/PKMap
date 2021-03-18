@@ -4,7 +4,9 @@
 import os
 from re import findall, match
 from copy import copy
-from collections.abc import Iterable 
+from collections.abc import Iterable
+from typing import Dict 
+from time import time
 
 import matplotlib.pyplot as plt
 from nilmtk import dataset
@@ -15,7 +17,9 @@ from pandas import read_excel
 from pandas import concat
 
 from numpy import diff, array, log, log10
-from numpy import sum, abs, sqrt
+from numpy import abs, sqrt
+from numpy import nansum as sum
+from numpy import nan, isnan
 from sklearn.cluster import KMeans
 
 from tqdm import tqdm
@@ -36,7 +40,31 @@ except Exception as E:
 from .utils import gen_PKMap2 as gen_PKMap
 from .utils import read_REFIT2 as read_REFIT
 from .utils import do_plot, do_plot_BM
+from .utils import beauty_time, NoPrints
 from .house_preview import plot_time
+
+
+def Hellinger(P: dict, Q: dict=None):
+    '''
+    caculate the pseudo-Hellinger distance
+
+    P, Q: the SBMs, a dict of float in [-1,1]
+
+    return: a float
+    '''
+
+    if Q is None:
+        Q = {k:0 for k in P.keys()}
+    
+    # p & q ought be synchronous as they share same keys()
+    p = array([0-sqrt(0-x) if x < 0 else sqrt(x) for x in P.values()])
+    q = array([0-sqrt(0-x) if x < 0 else sqrt(x) for x in Q.values()])
+
+    d = 0.5*sum((p-q)**2)
+    if sum(p-q)>0:
+        return sqrt(d)
+    else:
+        return 0-sqrt(d)
 
 
 class PKMap(object):
@@ -169,15 +197,22 @@ class PKMap(object):
             ed_day = main_.index[-1].date()
             m2 = None
             for ac1 in avail_ac:
-                with tqdm(leave=False, total=1, 
-                          bar_format='\tloading `{}` data from {}...'.format(ac1, self.house_name)):
+                t0 = time()
+                print('\tloading `{}` data from {}, '.format(ac1, self.house_name), end=' '*42)
+                lst = [42, ]
+                words = []
+                m1 = [words.append('with column `{}`'.format(m.appliances[0].label(pretty=True))) 
+                      or print('\b'*lst[-1] + words[-1], end=' '*16+'\b'*16)
+                      or lst.append(len(words[-1]))
+                      or next(m.load(ac_type=ac1)).loc[st_day:ed_day] for m in meters 
+                      if ac1 in m.available_ac_types('power')]
+                m2 = concat(m1, axis=1)     # combine each app to one DataFrame
                 
-                    m1 = [next(m.load(ac_type=ac1)).loc[st_day:ed_day] for m in meters 
-                        if ac1 in m.available_ac_types('power')]
-                    m2 = concat(m1, axis=1)     # combine each app to one DataFrame
                 app_names = [(m.appliances[0].identifier.type).title().replace(' ', '')
                             for m in meters if ac1 in m.available_ac_types('power')]
                 self.app_name[ac1] = app_names
+                print('\rfinish loading `{}` cols in {}'.format(len(app_names), beauty_time(time()-t0)) +' '*64)
+
 
                 ins_names = set([])
                 self.ins_name[ac1] = []
@@ -200,8 +235,8 @@ class PKMap(object):
                 m2.columns = self.ins_name[ac1]
                 self.data0[ac1] = m2
                 self.appQ[ac1] = len(m2.columns)
-                print(m2)
                 if not no_count:
+                    print(m2)
                     self.data2[ac1] = gen_PKMap(self, key=ac1, 
                                                 model=model, n_slice=n_slice,
                                                 no_save=no_save)
@@ -362,9 +397,9 @@ class PKMap(object):
 
     def BM(self, 
            obj=0,
-           sel_ac = None,
+           sel_ac: str= None,
            no_plot: bool=False,
-           fig_types: Iterable=(),
+           no_show: bool=False,
            **args
            ):
         '''
@@ -376,8 +411,14 @@ class PKMap(object):
         
         sel_ac: str('active, reactive, apparent)
             select a specific ac_type to analysis
+        no_plot: bool
+            skip the plotting func
+        no_show: bool
+            plot (including save figs) but no `plt.show()`
 
         **args:
+        fig_types: Iterable = (), 
+            figs to save in the types
         no_margin: bool=False
             draw heatmap only without margin marks if is True
 
@@ -421,17 +462,22 @@ class PKMap(object):
         '''
         extract data_ra and data_rb
         '''
-        for key, data0 in zip(('ra', 'rb'), [data_ra, data_rb]):
+        for key, datax in zip(('ra', 'rb'), [data_ra, data_rb]):
             key = '-'.join([obj, key])
-            self.data0[key] = data0
-            self.appQ[key] = len(data0.columns)
-            self.ins_name[key] = tuple(data0.columns)
+            # self.data0[key] = data0
+            # self.appQ[key] = len(data0.columns)
+            # self.ins_name[key] = tuple(data0.columns)
 
-            self.data2[key] = gen_PKMap(self, key=key, model=self.model)
+            # self.data2[key] = gen_PKMap(self, key=key, model=self.model)
+            if sel_ac == 'dd':
+                self.data2[key] = gen_PKMap(self, data0=datax, model=self.model)
+            else:
+                self.data0[key] = data0
+                self.data2[key] = gen_PKMap(self, data0=None, key=key, model=self.model)
             self.avail_key.add(key)
-            # if not no_plot:
             if False:
-                self.plot(key=key, fig_types=fig_types)
+            # if not no_plot:
+                self.plot(self, key=key, no_show=no_show, **args)
             # remove 0
             # self.data2[key] = {it[0]:(it[1] if it[1]>0 else 1) for it in self.data2[key].items()}
 
@@ -445,7 +491,7 @@ class PKMap(object):
         for sc in data_ra.keys():
             # State-Combination, like '00110110' for appQ is 9
             if data2[sc] == 0:
-                sbm[sc] = None
+                sbm[sc] = nan
             else:
                 if data_ra[sc] == 0:
                     y1 = 0
@@ -463,20 +509,27 @@ class PKMap(object):
                 sbm_ = (sqrt(2)*y1 + 1)/(sqrt(2)*y2 + 1) -sqrt(2)
                 sbm[sc] = log(sbm_ + sqrt(2))/log(1+sqrt(2))
             # print('SBM[{}] <- {}'.format(sc, sbm_))
-        bm = sum(abs([k for k in sbm.values() if k]))
-        s = sum([k > 2 for k in data2.values()])
+        bm = sum([abs(k) for k in sbm.values()])
+        s = sum([k > 0 for k in data2.values()])
         bm /= s
-        print('sum([k > 2 for k in data2]) is {}'.format(s))
+        # s is the number of valid item in sbm map
+        print('find {} valid items in SBM'.format(s))
+        del s
         print('get BM as {}'.format(bm))
 
         key = '-'.join([obj, 'bm'])
         self.data2[key] = sbm
-        self.bm[key] = sbm
+        self.bm[key] = bm
         self.avail_key.add(key)
 
-        do_plot(self, key=key, fig_types=fig_types, no_show=no_plot, **args)
+        data2 = {k:0-v for k,v in self.data2[key].items()}
+        print('=== D_pH is {}'.format(Hellinger(self.data2[key])))
+        print('=== 2*D_pH is {}'.format(Hellinger(self.data2[key], data2)))
 
-        return bm
+        if not no_plot:
+            do_plot(self, key=key, no_show=no_show, **args)
+
+        return bm, sbm
 
 
 if __name__ == "__main__":
