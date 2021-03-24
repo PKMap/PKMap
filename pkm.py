@@ -44,7 +44,7 @@ from .utils import beauty_time, NoPrints
 from .house_preview import plot_time
 
 
-def Hellinger(P: dict, Q: dict=None):
+def Hellinger(P: dict, Q: dict=None, no_check: bool=False):
     '''
     caculate the pseudo-Hellinger distance
 
@@ -56,15 +56,41 @@ def Hellinger(P: dict, Q: dict=None):
     if Q is None:
         Q = {k:0 for k in P.keys()}
     
+    if not no_check:
+        Q = {k:Q[k] if Q[k] else 0 for k in Q.keys()}
+        P = {k:P[k] if P[k] else 0 for k in P.keys()}
+    
     # p & q ought be synchronous as they share same keys()
-    p = array([0-sqrt(0-x) if x < 0 else sqrt(x) for x in P.values()])
-    q = array([0-sqrt(0-x) if x < 0 else sqrt(x) for x in Q.values()])
+    p = array([sqrt(x) if x > 0 else 0-sqrt(0-x) for x in P.values()])
+    q = array([sqrt(x) if x > 0 else 0-sqrt(0-x) for x in Q.values()])
 
     d = 0.5*sum((p-q)**2)
-    if sum(p-q)>0:
-        return sqrt(d)
-    else:
-        return 0-sqrt(d)
+    # if sum(p-q)>0:
+    #     return sqrt(d)
+    # else:
+    #     return 0-sqrt(d)
+    return sqrt(d)
+
+
+def HellingerO(P: dict, Q: dict=None):
+    '''
+    caculate the pseudo-Hellinger distance
+    in `original` type
+
+    P, Q: the SBMs, a dict of float in [-1,1]
+
+    return: a float
+    '''
+
+    if Q is None:
+        Q = {k:0 for k in P.keys()}
+    
+    # p & q ought be synchronous as they share same keys()
+    p = array([sqrt(0-x) if x < 0 else sqrt(x) for x in P.values()])
+    q = array([sqrt(0-x) if x < 0 else sqrt(x) for x in Q.values()])
+
+    d = 0.5*sum((p-q)**2)
+    return sqrt(d)
 
 
 class PKMap(object):
@@ -75,6 +101,7 @@ class PKMap(object):
     def __init__(self, file = None, 
                  model: str='thrd', 
                  n_slice=None, 
+                 sample_period: int=None,
                  no_count: bool=False,
                  no_load: bool=False,
                  ):
@@ -98,6 +125,7 @@ class PKMap(object):
         self.n_slice = n_slice
         self.no_count = no_count
         self.no_load = no_load
+        self.sample_period = sample_period
         self.cache_dir = os.path.join(os.getcwd(), 'cache')
         self.bm = {}
 
@@ -201,11 +229,19 @@ class PKMap(object):
                 print('\tloading `{}` data from {}, '.format(ac1, self.house_name), end=' '*42)
                 lst = [42, ]
                 words = []
-                m1 = [words.append('with column `{}`'.format(m.appliances[0].label(pretty=True))) 
-                      or print('\b'*lst[-1] + words[-1], end=' '*16+'\b'*16)
-                      or lst.append(len(words[-1]))
-                      or next(m.load(ac_type=ac1)).loc[st_day:ed_day] for m in meters 
-                      if ac1 in m.available_ac_types('power')]
+                if self.sample_period:
+                    m1 = [words.append('with column `{}`'.format(m.appliances[0].label(pretty=True))) 
+                        or print('\b'*lst[-1] + words[-1], end=' '*16+'\b'*16)
+                        or lst.append(len(words[-1]))
+                        or next(m.load(ac_type=ac1, sample_period=self.sample_period)).loc[st_day:ed_day] for m in meters 
+                        if ac1 in m.available_ac_types('power')]
+                else:
+                    m1 = [words.append('with column `{}`'.format(m.appliances[0].label(pretty=True))) 
+                        or print('\b'*lst[-1] + words[-1], end=' '*16+'\b'*16)
+                        or lst.append(len(words[-1]))
+                        or next(m.load(ac_type=ac1)).loc[st_day:ed_day] for m in meters 
+                        if ac1 in m.available_ac_types('power')]
+
                 m2 = concat(m1, axis=1)     # combine each app to one DataFrame
                 
                 app_names = [(m.appliances[0].identifier.type).title().replace(' ', '')
@@ -303,10 +339,12 @@ class PKMap(object):
                         # self.load_nilm(model=self.model, n_slice=self.n_slice, no_count=False)
                         for ac1 in self.avail_ac:
                             self.data2[ac1] = gen_PKMap(self, key=ac1, model=self.model, n_slice=self.n_slice)
-                            self.avail_keyf.add(ac1)
+                            self.avail_key.add(ac1)
                     else:
                         self.load(no_count=False)
                 data2 = self.data2[key]
+            else:
+                pass
 
             do_plot(self, data2=data2, key=key, 
                     cmap=cmap, fig_types=fig_types, 
