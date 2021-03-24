@@ -3,7 +3,7 @@
 # utils for PKMap using pandas.DataFrame
 #   with the help of multiprocess
 
-from numpy import sum
+from numpy import nansum as sum
 from numpy import fabs, ceil, sqrt
 from numpy import log
 from numpy import nan, isnan
@@ -26,7 +26,7 @@ from tqdm import tqdm
 # import re
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpat
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, PowerNorm
 from matplotlib.colors import ListedColormap
 from matplotlib.colors import LinearSegmentedColormap
 import seaborn as sns
@@ -490,7 +490,7 @@ def gen_PKMap2(self, data0=None, key:str='active',
         no_old = False       # caculate new data instead of old data from file
     else:
         no_old = True
-        print('\t\ano_old is `True`!')
+        print('\tno_old is `True`!')
 
 
     if not no_old and not no_save: 
@@ -1186,10 +1186,233 @@ def do_plot_single3(self, data3=None, key: str='active',
     for better bitmap saving
     imshow() won't save bitmaps
     '''
+    if not all(isnan(array(ekmap)).flat):
+        # incase the data2 is empty
+        my_img = ax.pcolormesh(ekmap, cmap=cmap, 
+                            vmin=vmin, 
+                            vmax=vmax, 
+                            norm=LogNorm(),
+                            )
+        ax.invert_yaxis()
+        my_pat.set_zorder(0.1)
+        my_pay.set_zorder(0.2)
+        my_img.set_zorder(1.2)
+
+        if not no_margin:
+            axn = fig.add_subplot(gs[1,3])
+            cbar = fig.colorbar(my_img, cax=axn)
+            cbar.ax.set_ylabel('counts ({} total)'.format(vmax), size='x-large')    
+    
+    ax.set_yticks(arange(2**ny))
+    ax.set_xticks(arange(2**nx))
+    ax.set_yticklabels(ekmap.index.values)
+    ax.set_xticklabels(ekmap.columns.values)
+    if pats:
+        # `pats' is not empty, do aditional draw
+        for pat in pats:
+            ax.add_patch(copy(pat))
+    ax.axis('off')
+    
+    if not no_margin:
+        for S, pl, xy in zip(M, (gs[1, 0], gs[1,2], gs[2,1], gs[0,1]), ('L','R','B','T')):
+            # S = L, R, B, T
+            if xy in ('B', 'T'):
+                ax_S = fig.add_subplot(pl, sharex=ax)
+            elif xy in ('L', 'R'):
+                ax_S = fig.add_subplot(pl, sharey=ax)
+            else:
+                ax_S = fig.add_subplot(pl)
+            # print(f'{S}')
+            cf1 = wd1
+            cf2 = 0.1
+            for margin in S.items():
+                mag_n = margin[0]
+                # dict.key, like `A1'
+                mag_v = margin[1]
+                # dict.value like `(2, ((3.5, 7.48),))'
+                # or `(1, ((0.5, 2.5), (4.5, 6.5)))'
+                ofst = mag_v[0]     # offset, a number start from 1
+                args_text = {'ha':'center', 'va':'center', 'backgroundcolor':'w', 
+                            'family':'monospace', 'size':'x-large'}
+                for ind in mag_v[1]:
+                    # `mag_v[1]' like `((3.5, 7.48),)'
+                    # or `((0.5, 2.5), (4.5, 6.5))'
+                    m_st = ind[0]           # start
+                    m_itl = ind[1] - ind[0]     # interval
+                    m_tx = m_st + m_itl/2       # coordinate of text, parallel to the axis
+                    m_ty = cf1*ofst - cf2       # vartical to the axis
+                    if   xy in ('L', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (cf1, m_st), 0-cf1-m_ty, m_itl, fill=False))
+                        ax_S.text(0-m_ty, m_tx, mag_n, **args_text)
+                    elif xy in ('R', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (0-cf1, m_st), cf1+m_ty, m_itl, fill=False))
+                        ax_S.text(m_ty, m_tx, mag_n, **args_text)
+                    elif xy in ('B', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (m_st, cf1), m_itl, 0-cf1-m_ty, fill=False))
+                        ax_S.text(m_tx, 0-m_ty, mag_n, **args_text)
+                    elif xy in ('T', ):
+                        ax_S.add_patch(plt.Rectangle(
+                            (m_st, 0-cf1), m_itl, cf1+m_ty, fill=False))
+                        ax_S.text(m_tx, m_ty, mag_n, **args_text)
+
+            if   xy in ('L', ):
+                ax_S.set_xlim(left=0-n_L*wd1+wd2, right=0)
+            elif xy in ('R', ):
+                ax_S.set_xlim(left=0, right=n_R*wd1-wd2)
+            elif xy in ('B', ):
+                ax_S.set_ylim(bottom=0-n_B*wd1+wd2, top=0)
+            elif xy in ('T',):
+                ax_S.set_ylim(bottom=0, top=n_T*wd1-wd2)
+                if titles:
+                    ax_S.set_title(titles, size=24)
+            ax_S.axis('off')
+
+
+    for fig_type in fig_types:
+        plt.pause(1e-13)
+        # see in https://stackoverflow.com/questions/62084819/
+        plt.savefig(os.path.join(basepath, 'figs', 
+                    file_name) + 
+                    # str(time())[-5:] + 
+                    fig_type, 
+                    bbox_inches='tight')
+
+    if no_show:
+        plt.close(fig)
+    else:
+        plt.show()
+
+    return fig
+
+
+def do_plot_metric(self, data3, key: str='metric: metric', 
+                    cmap='inferno_r', fig_types=(), 
+                    no_show: bool=False, no_margin: bool=False,
+                    titles="", pats=[]):
+    """
+        a "colorbar'-involved version
+    plot WKMap with markers around
+    using `fig.add_gridspec'
+    data3: a dict 
+
+    ====== curtion! the use of x & y are mixed! ======
+    """
+    # global file_name
+    global basepath
+    key = key.split('metric: ')[-1].lower()
+    file_name = '_'.join(['PKMetri', self.dataset, self.house_name, key])
+    print('file_name is `{}`'.format(file_name))
+
+    appQ = len(tuple(data3.keys())[0])  # total number of appliance
+    # appQ = self.appQ[key]
+    ny = int(appQ / 2)
+    nx = appQ - ny
+
+    # n_M, *M = GMI(appQ, self.ins_name[key])
+    n_M, *M = GMI(appQ)
+
+    n_L, n_R, n_B, n_T = n_M
+    wdd = {         # n_of_variables: (wdx, wdy, magnify_of_lxy)
+        0: (0.6, 0.6, 0.4, 0),      # the default parameter
+        # 7: (0.8, 1.2),
+        4: (1, 1, 0.6, 0), 
+        9:(0.4, 0.4, 0.35, -0.2),
+        10:(0.4,0.4,0.3,0),
+    }
+    if appQ in wdd.keys():
+        wdx, wdy, mg, wfx = wdd[appQ]
+    else: 
+        wdx, wdy, mg, wfx = wdd[0]
+    # wfx: width compensation of the figsize
+    # I don't know why there is a slightly offset
+    # so a small compensation fixer may be a quick repair
+
+    wd1 = 0.3
+    wd2 = 0
+    if mod(appQ, 2):
+        # appQ is 5,7,9,...
+        lx = mg*2**5
+        ly = mg*2**4
+    else:
+        # appQ is 6,8,10,...
+        lx = mg*2**4
+        ly = mg*2**4
+    # print(f'{((n_L+n_R)*wdx+lx, (n_T+n_B)*wdy+ly)}')
+    # print(f'{(n_L*wdx, lx, n_R*wdx)}')
+    # print(f'{(n_T*wdy, ly, n_B*wdy)}')
+
+    if not no_margin:
+        figsize = [(n_L+n_R)*wdx+lx+wfx, (n_T+n_B)*wdy+ly, 0]
+        cbw = 0.3      # width of color bar
+        figsize[2] = figsize[0] + cbw + 0.6
+        # kill the floating error
+        figsize = tuple([int(k*10)/10 for k in figsize[:-3:-1]])
+        fig = plt.figure(figsize=figsize, 
+                        constrained_layout=True)
+        print('figsize is {}'.format((fig.get_figwidth(), fig.get_figheight())))
+        # fig = plt.figure(figsize=(ly, lx))
+        gs = fig.add_gridspec(nrows=3, ncols=4, 
+                    width_ratios=(n_L*wdx, lx, n_R*wdx, cbw), 
+                    height_ratios=(n_T*wdy, ly, n_B*wdy),
+                    left=0, right=1, bottom=0, top=1,
+                    wspace=0.02, hspace=0.02)
+
+        ax = fig.add_subplot(gs[1,1])
+    else:
+        figsize = (lx, ly)
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot()
+        file_name = '_'.join([file_name, 'N'])
+        gs = None
+
+    # ====== `ekmap' is the contant of a subplot ======
+    ekmap = KM(ny, nx)      # preparing a container
+
+    norm_ = None
+    if key in ('f1score', 'recall', 'precision', ):
+        vmin, vmax = -0.06, 1.06
+    elif key in ('rmse', 'mae', ):
+        vmin, vmax = -0.2, None
+        norm_ = PowerNorm(gamma=0.6)
+        cmap='inferno'
+    elif key in ('nep', 'nde',  ):
+        vmin, vmax = -0.02, None
+        norm_ = PowerNorm(gamma=2)
+        cmap='inferno'
+    else:
+        vmin, vmax = None, None
+
+    for _ind in ekmap.index:
+        for _col in ekmap.columns:
+            d = data3[_ind + _col]
+            if not isnan(d):
+                # d is larger than 0
+                ekmap.loc[_ind, _col] = d
+            else:
+                # d equals 0
+                ekmap.loc[_ind, _col] = None
+    print(ekmap)
+    print('(vmax, vmin) is {}'.format((vmax, vmin)))
+    b_0 = 0.01
+    b_x = 2**nx-b_0
+    b_y = 2**ny-b_0
+    my_pat = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, hatch=r'/'))
+    my_pay = ax.add_patch(mpat.Rectangle([b_0, b_0],b_x, b_y, fill=False, ec='w', lw=1.6))
+    
+    # colors: `azure`(cyan), `aliceblue`, `ghostwhite`
+    '''
+    use pcolormesh() instead of imshow()
+    for better bitmap saving
+    imshow() won't save bitmaps
+    '''
     my_img = ax.pcolormesh(ekmap, cmap=cmap, 
                         vmin=vmin, 
                         vmax=vmax, 
-                        norm=LogNorm())
+                        norm=norm_,
+                        )
     ax.invert_yaxis()
     my_pat.set_zorder(0.1)
     my_pay.set_zorder(0.2)
@@ -1264,12 +1487,12 @@ def do_plot_single3(self, data3=None, key: str='active',
 
         axn = fig.add_subplot(gs[1,3])
         cbar = fig.colorbar(my_img, cax=axn)
-        cbar.ax.set_ylabel('counts ({} total)'.format(vmax), size='x-large')    
+        cbar.ax.set_ylabel(key.split('metric: ')[-1], size='x-large', fontfamily='monospace')    
 
     for fig_type in fig_types:
         plt.pause(1e-13)
         # see in https://stackoverflow.com/questions/62084819/
-        plt.savefig(os.path.join(basepath, 'figs', 
+        plt.savefig(os.path.join(basepath, 'BMfigs', 
                     file_name) + 
                     # str(time())[-5:] + 
                     fig_type, 
@@ -1480,7 +1703,7 @@ def do_plot_BM(self, data3=None, key: str='active',
     for fig_type in fig_types:
         plt.pause(1e-13)
         # see in https://stackoverflow.com/questions/62084819/
-        plt.savefig(os.path.join(basepath, 'figs', 
+        plt.savefig(os.path.join(basepath, 'BMfigs', 
                     file_name) + 
                     # str(time())[-5:] + 
                     fig_type, 
@@ -1745,10 +1968,8 @@ def do_plot_multi(data3, cmap='inferno', fig_types=(), no_show=False,
     return fig
 
 
-def do_plot(self, data2=None, key: str='active', 
-            ahead=(), cmap='inferno_r', 
-            fig_types=(), no_show=False,
-            titles="", pats=[], **args):
+def do_plot(self, data2=None, key: str='active',
+            ahead=(), fig_types=(), **args):
     """
     do plot, save EKMap figs 
 
@@ -1768,13 +1989,13 @@ def do_plot(self, data2=None, key: str='active',
     fig_types: an enumerable object, tuple here
             used if figure saving required
             ## string along is not excepted ## 
+
+    **args:
     no_show: run `plt.show()' or not 
         (fig still showed when set `True', fix later since is harmless)
     title: a string, the fig title 
             must have same size as `data2' (enumerate together)
     pats: add rectangle if needed, an enumerable object
-
-    **args:
     no_margin: bool, 
         draw heatmap only without margin marks if is True
 
@@ -1788,8 +2009,12 @@ def do_plot(self, data2=None, key: str='active',
     if data2 is None:
         data2 = self.data2[key]
         data2p = None       # data2 to pass (passing not None)
+        appQ = len(list(data2.keys())[0])
     else:
         data2p = data2
+        # replenish the `data2` if not filled with None:
+        appQ = len(list(data2p.keys())[0])
+        data2p = {k:data2p[k] if k in data2p.keys() else nan for k in GC(appQ)}
     '''try:
         appQ = len(tuple(data2.keys())[0])  # total number of appliance
     except AttributeError as identifier:
@@ -1806,7 +2031,8 @@ def do_plot(self, data2=None, key: str='active',
         else:
             fig_types = (fig_types, )
     # 'png' --> '.png'
-    fig_types = tuple([t if t.startswith('.') else '.'.join(['',t]) for t in fig_types])
+    fig_types = tuple([t if '.' in t else '.'.join(['',t]) for t in fig_types])
+
 
     # function reconsitution
     if isinstance(data2, dict):
@@ -1818,28 +2044,25 @@ def do_plot(self, data2=None, key: str='active',
             '''data3 = {''.join([key[s] for s in order_ind]): data2[key]
                     for key in data2.keys()}
             '''
-            if key.endswith('bm'):
-                print('\tdo_plot_BM')
-                do_plot_BM(self, data3=data2p, key=key, 
-                    cmap=cmap, fig_types=fig_types, 
-                    no_show=no_show,
-                    titles=titles, pats=pats, **args)
+            if 'bm' in key.lower():
+                print('\tdo_plot_BM!')
+                do_plot_BM(self, data3=data2p, key=key,
+                                fig_types=fig_types, **args)
+            elif 'metric: ' in key.lower():
+                print('\tdo_plot_metric!')
+                do_plot_metric(self, data3=data2p, key=key,
+                                fig_types=fig_types, **args)
             else:
-                print('\tdo_plot_single')
-                do_plot_single3(self, data3=data2, key=key, 
-                                cmap=cmap, fig_types=fig_types, 
-                                no_show=no_show,
-                                titles=titles, pats=pats, **args)
+                print('\tdo_plot_single3!')
+                do_plot_single3(self, data3=data2p, key=key,
+                                fig_types=fig_types, **args)
     elif isinstance(data2, Iterable) and isinstance(data2[0], dict):
         # data2 is a list of dict
         '''data3 = tuple({''.join([key[s] for s in order_ind]): datax[key]
                        for key in datax.keys()} for datax in data2)
         '''
         print('\tdo_plot_multiple')
-        do_plot_multi(data2, 
-                      cmap=cmap, fig_types=fig_types, 
-                      no_show=no_show,
-                      titles=titles, pats=pats, **args)
+        do_plot_multi(data2, fig_types=fig_types, **args)
 
     else:
         raise('get unknown type of data2: {}'.format(type(data2)))
