@@ -128,6 +128,7 @@ class PKMap(object):
         self.sample_period = sample_period
         self.cache_dir = os.path.join(os.getcwd(), 'cache')
         self.bm = {}
+        self.Dph = {}
 
         if not os.path.exists(self.cache_dir):
             os.mkdir(self.cache_dir)
@@ -243,7 +244,7 @@ class PKMap(object):
                         if ac1 in m.available_ac_types('power')]
 
                 m2 = concat(m1, axis=1)     # combine each app to one DataFrame
-                
+
                 app_names = [(m.appliances[0].identifier.type).title().replace(' ', '')
                             for m in meters if ac1 in m.available_ac_types('power')]
                 self.app_name[ac1] = app_names
@@ -455,6 +456,7 @@ class PKMap(object):
             plot (including save figs) but no `plt.show()`
 
         **args:
+            for plotting func
         fig_types: Iterable = (), 
             figs to save in the types
         no_margin: bool=False
@@ -510,8 +512,8 @@ class PKMap(object):
             if sel_ac == 'dd':
                 self.data2[key] = gen_PKMap(self, data0=datax, model=self.model)
             else:
-                self.data0[key] = data0
-                self.data2[key] = gen_PKMap(self, data0=None, key=key, model=self.model)
+                self.data0[key] = datax
+                self.data2[key] = gen_PKMap(self, data0=datax, key=key, model=self.model)
             self.avail_key.add(key)
             if False:
             # if not no_plot:
@@ -525,6 +527,8 @@ class PKMap(object):
         t_ra = sum(list(data_ra.values()))
         t_rb = sum(list(data_rb.values()))
         print('get (t_ra, t_rb) as ({}, {})'.format(t_ra, t_rb))
+        self.t_ra = t_ra
+        self.t_rb = t_rb
         sbm = {}
         for sc in data_ra.keys():
             # State-Combination, like '00110110' for appQ is 9
@@ -560,15 +564,69 @@ class PKMap(object):
         self.bm[key] = bm
         self.avail_key.add(key)
 
-        data2 = {k:0-v for k,v in self.data2[key].items()}
-        print('=== D_pH is {}'.format(Hellinger(self.data2[key])))
-        print('=== 2*D_pH is {}'.format(Hellinger(self.data2[key], data2)))
+        h1 = Hellinger(self.data2[key])
+        print('=== D_pH  is {}'.format(h1))
+        if not self.no_count:
+            h2 = Hellinger(self.data2[key], self.data2['active'])
+            print('=== D_pH2 is {}'.format(h2))
+            self.Dph[key] = (h1, h2)
+        else:
+            self.Dph[key] = (h1, )
+
+        # print('=== 2*D_pH is {}'.format(Hellinger(self.data2[key], data2)))
 
         if not no_plot:
             do_plot(self, key=key, no_show=no_show, **args)
 
-        return bm, sbm
+        return bm
 
+'''
+def do1():
+    
+    with NoPrints():
+        bm0, sbm0 = p1.BM(obj=2, sel_ac='active', no_plot=True)
+    p1.appQ['dd'] = 9
+    p1.app_name['dd'] = p1.app_name['active']
+    p1.ins_name['dd'] = p1.ins_name['active']
+    datas = []
+    hs = []
+    bms = []
+    d0 = p1.data0['active']
+    ys = set(d0.index.year)
+    t0 = time()
+    print(print('gogogo') and print(2-1))
+    
+    for y in ys:
+        # the hash of int is neurally in order
+        d0_y = d0.loc[d0.index.year==y]
+        ms = set(d0_y.index.month)
+        for m in ms:
+            d0_m = d0_y.loc[d0_y.index.month==m]
+            ds = set(d0_m.index.day)
+            for d in ds:
+                d0_x = d0_m.loc[d0_m.index.day==d]
+                # set `end` to stay
+                print('\r\t\treading {}'.format(d0_x.index[0].date()), end='')
+                if d0_x.index[0].hour < 1 and d0_x.index[-1].hour > 22:
+                    datas.append(d0_x)
+
+                    with f():
+                        p1.data0['dd'] = d0_x.copy()
+                        p1.data2['dd'] = gen_PKMap(p1, key='dd')
+                        bm, sbm = p1.BM(obj=2, sel_ac='dd', no_plot=True)
+                        h = Hellinger(sbm0, sbm)
+                    hs.append(h)
+                    bms.append(bm)
+                    
+                else:
+                    print('\t'*2+'find invalid time: {}, {:0>2}:{:0>2} to {:0>2}:{:0>2}'.format(
+                        d0_x.index[0].date(), 
+                        d0_x.index[0].hour, d0_x.index[0].minute, 
+                        d0_x.index[-1].hour, d0_x.index[-1].minute
+                        )+' '*22, end='')
+    del d0_y, d0_m, d0_x
+    print('\rcost {} '.format(beauty_time(time()-t0)+' '*64))
+'''
 
 if __name__ == "__main__":
     pass
