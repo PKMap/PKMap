@@ -76,7 +76,7 @@ is counted.
 Details about this has been explained in my latest paper
 (reference will be updated soon)
 
-A Karnaugh map caj be displayed by:
+A Karnaugh map can be displayed by:
 
 ```python
 obj.plot()
