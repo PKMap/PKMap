@@ -1,8 +1,12 @@
 _*
-.*
+.vscode
 
 REFIT
 *ex
 *exm*
 
 !__init__.py
+
+build
+dist
+*.egg-info
