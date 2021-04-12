@@ -1,7 +1,7 @@
-![build](https://img.shields.io/badge/build-twine-45ce82)
-![install with](https://img.shields.io/badge/install%20with-PyPI-ea6f46)
+![build](https://img.shields.io/badge/build-twine-3cb371)
+![install with](https://img.shields.io/badge/install_with-PyPI-ff7f50)
 ![python](https://img.shields.io/badge/Python-3.7-4169e1)
-![version](![python](https://img.shields.io/badge/Python-3.7-f69f00))
+![version](https://img.shields.io/badge/Version-0.2.1-ffa500)
 
 # the Pseudo Karnaugh Map
 
@@ -17,7 +17,7 @@ This project was started to guide the generating of synthesis datasets
 in which a self-collected data is added into a public dataset.
 Later, we found it works in dataset imbalance representation as well.
 
-## Why PKMap?
+## Why PKMap
 
 Gain instructive insight of a datset before utilizing
 is currently virtually impossible.
