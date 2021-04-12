@@ -1,7 +1,7 @@
-![build](https://img.shields.io/badge/build-twine-3cb371)
-![install with](https://img.shields.io/badge/install%20with-PyPI-ff7f50)
+![build](https://img.shields.io/badge/build-twine-45ce82)
+![install with](https://img.shields.io/badge/install%20with-PyPI-ea6f46)
 ![python](https://img.shields.io/badge/Python-3.7-4169e1)
-![version](![python](https://img.shields.io/badge/Python-3.7-ffa500))
+![version](![python](https://img.shields.io/badge/Python-3.7-f69f00))
 
 # the Pseudo Karnaugh Map
 
