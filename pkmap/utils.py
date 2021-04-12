@@ -330,6 +330,35 @@ def do_count(arg2):
     return val
 
 
+def do_count2(arg2):
+    '''
+        using pandas version, unfinished
+    count how many times each stat appears
+    used in multi-processing, so I pack args in this way
+
+    val: the container holds the counting result
+        is a dict with `0' defult values
+    data1: a fixed DataFrame part to count
+
+    return: counting results
+    '''
+
+    # TODO: 1. apply a func to each line to get the codes
+    # 2. using df.value_counts() func to count codes
+
+    val, data1, pybar = arg2
+    # `val' is a container
+    for k in data1.itertuples():
+        # combinate new row as a key of a dict
+        nw = ''.join([str(int(u)) for u in k[1:]])
+
+        # for 0 default
+        val[nw] += 1
+        pybar.update()
+    # print('got {} total'.format(sum(tuple(val.values()))))
+    return val
+
+
 def plot_bar(data2):
     """
     pandas embedded plot.bar will stuck

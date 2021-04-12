@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 # private package
 # from pkmap import pkmap
-from pkmap_data import AD, pat_data, app_data
+from .pkmap_data import AD, pat_data, app_data
 # from ekmapTK import KM
 
 
@@ -67,7 +67,7 @@ class PointBrowser:
         """
         docstring
         """
-
+        print((event.xdata, event.ydata))
         if event.inaxes == self.ax:
             # print((event.xdata, event.ydata))
             # print((self.inds[int(event.ydata)], self.cols[int(event.xdata)]))
@@ -212,7 +212,7 @@ class PointBrowser:
         self.noplot = False
 
 
-def load1(self, house_number, interval:str='hr'):
+def load1(self, house_number, interval:str='day'):
     """
     docstring
     """
@@ -307,7 +307,7 @@ def plot_time(self,
               house_number: int=6, 
               noax2: bool=False, 
               app_name = None,
-              interval: str='hr', 
+              interval: str='day', 
               ):
     """
     docstring
