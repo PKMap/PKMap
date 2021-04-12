@@ -2248,5 +2248,7 @@ if __name__ == "__main__":
     print(t + ' finished ' + t)
 # elif __name__ == "__mp_main__":
 #     print('`utils` run as {}!'.format(__name__))
+elif __name__ == "pkmap.utils":
+    pass
 else:
     print('`utils` run as name: {} but main'.format(__name__))
